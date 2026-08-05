@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 from webui_utils.constants import (
     DEFAULT_PORT, DEFAULT_SUFFIX, DEFAULT_LOG_FILE, DEFAULT_DOWNLOAD_DIR,
     DEFAULT_AUTO_INTERVAL, DEFAULT_AUTO_DELAY,
+    DEFAULT_AUTH_SERVER, DEFAULT_REDIRECT_SERVER,
     LOG_TAIL_LINES, SHUTDOWN_DELAY,
 )
 from webui_utils.config import read_env, write_env, read_port, read_module_prop
@@ -83,7 +84,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 .replace("__LOGFILE__", DEFAULT_LOG_FILE)
                 .replace("__DOWNLOAD__", DEFAULT_DOWNLOAD_DIR)
                 .replace("__INTERVAL__", str(DEFAULT_AUTO_INTERVAL))
-                .replace("__DELAY__", str(DEFAULT_AUTO_DELAY)))
+                .replace("__DELAY__", str(DEFAULT_AUTO_DELAY))
+                .replace("__AUTH_SERVER__", DEFAULT_AUTH_SERVER)
+                .replace("__REDIRECT_SERVER__", DEFAULT_REDIRECT_SERVER))
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -164,6 +167,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             password=self._param(p, "password"),
             suffix=self._param(p, "suffix", DEFAULT_SUFFIX),
             debug=str(debug).lower(),
+            auth_server=self._param(p, "auth_server", DEFAULT_AUTH_SERVER),
+            redirect_server=self._param(p, "redirect_server", DEFAULT_REDIRECT_SERVER),
         )
         self._json({"ok": True})
 

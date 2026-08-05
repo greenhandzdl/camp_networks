@@ -29,6 +29,8 @@ PASSWORD = os.getenv("PASSWORD", "")
 ACCOUNT_SUFFIX = os.getenv("ACCOUNT_SUFFIX", "@cmcc")
 DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 IPV6_ADDRESS = os.getenv("IPV6_ADDRESS", "")
+AUTH_SERVER = os.getenv("AUTH_SERVER", "10.0.1.5")
+REDIRECT_SERVER = os.getenv("REDIRECT_SERVER", "1.2.3.4")
 
 # ---------- 返回码 ----------
 EXIT_SUCCESS = 0
@@ -78,7 +80,7 @@ def is_internet_connected():
         return False
 
 def is_gateway_reachable():
-    url = "http://1.2.3.4"
+    url = f"http://{REDIRECT_SERVER}"
     log_debug(f"检测网关: GET {url}")
     status, content, err = http_get_verbose(url, timeout=3, allow_redirects=False)
     if err:
@@ -87,7 +89,7 @@ def is_gateway_reachable():
 
 def get_gateway_params():
     try:
-        resp = requests.get("http://1.2.3.4", timeout=5, allow_redirects=False)
+        resp = requests.get(f"http://{REDIRECT_SERVER}", timeout=5, allow_redirects=False)
         resp.raise_for_status()
     except Exception as e:
         log_debug(f"获取网关页面失败: {e}")
@@ -133,7 +135,7 @@ def get_gateway_params():
         return (None,) * 5
     wlan_user_mac = wlan_user_mac_raw.replace("-", "").replace(":", "").lower()
     if not host:
-        host = "10.0.1.5"
+        host = AUTH_SERVER
     return host, wlan_user_ip, wlan_ac_name, wlan_ac_ip, wlan_user_mac
 
 def perform_login(host, wlan_user_ip, wlan_ac_name, wlan_ac_ip, wlan_user_mac):
@@ -184,7 +186,7 @@ def main():
         return EXIT_SUCCESS
 
     if not is_gateway_reachable():
-        print("❌ 网关 1.2.3.4 不可达，网络异常。")
+        print(f"❌ 网关 {REDIRECT_SERVER} 不可达，网络异常。")
         return EXIT_NETWORK_ERROR
 
     print("✅ 网关可达，开始获取认证参数...")

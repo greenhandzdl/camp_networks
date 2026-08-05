@@ -125,6 +125,10 @@ border-radius:10px;transition:color .2s}
         <input type="password" id="password" placeholder="认证密码"></div>
       <div class="form-group"><label>运营商后缀</label>
         <input type="text" id="suffix" placeholder="@cmcc"></div>
+      <div class="form-group"><label>认证服务器 IP <span style="font-size:11px;color:var(--text2)">(AUTH_SERVER)</span></label>
+        <input type="text" id="authServer" placeholder="__AUTH_SERVER__"></div>
+      <div class="form-group"><label>网关重定向地址 <span style="font-size:11px;color:var(--text2)">(REDIRECT_SERVER)</span></label>
+        <input type="text" id="redirectServer" placeholder="__REDIRECT_SERVER__"></div>
       <div class="toggle-row"><span>调试模式</span>
         <label class="toggle"><input type="checkbox" id="debug"><span class="slider"></span></label></div>
       <div style="margin-top:16px">
@@ -194,12 +198,14 @@ border-radius:10px;transition:color .2s}
 <div class="toast" id="toast"></div>
 
 <script>
-const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__",DFT_DL="__DOWNLOAD__",DFT_INT="__INTERVAL__",DFT_DELAY="__DELAY__";
+const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__",DFT_DL="__DOWNLOAD__",DFT_INT="__INTERVAL__",DFT_DELAY="__DELAY__",DFT_AUTH="__AUTH_SERVER__",DFT_REDIR="__REDIRECT_SERVER__";
 let _runBusy=false;
 document.addEventListener('DOMContentLoaded',()=>{
   fetch('/api/config').then(r=>r.json()).then(c=>{
     $('username').value=c.username||'';$('password').value=c.password||'';
     $('suffix').value=c.suffix||DFT_SUFFIX;$('debug').checked=c.debug==='true';
+    $('authServer').value=c.auth_server||DFT_AUTH;
+    $('redirectServer').value=c.redirect_server||DFT_REDIR;
     $('port').value=c.port||DFT_PORT;$('logFile').value=c.log_file||DFT_LOG;
     $('downloadDir').value=c.download_dir||DFT_DL;
     $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
@@ -228,7 +234,8 @@ function saveConfig(){
   const b=$('btnSave');btnLoading(b,'保存中...');
   fetch('/api/save',{method:'POST',body:new URLSearchParams({
     username:$('username').value,password:$('password').value,
-    suffix:$('suffix').value,debug:$('debug').checked?'true':'false'})})
+    suffix:$('suffix').value,debug:$('debug').checked?'true':'false',
+    auth_server:$('authServer').value,redirect_server:$('redirectServer').value})})
   .then(r=>r.json()).then(d=>toast(d.ok?'配置已保存':'保存失败: '+d.error))
   .catch(()=>toast('网络错误')).finally(()=>btnReset(b,'保存配置'));
 }
