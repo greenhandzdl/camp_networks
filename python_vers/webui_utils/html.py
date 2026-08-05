@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2000)}
 function btnLoading(b,t){b.disabled=true;b.innerHTML='<span class="spinner"></span> '+t}
-function btnReset(b,t){b.disabled=false;b.textContent=t}
+function btnReset(b,t){b.disabled=false;const s=b.querySelector('span');if(s)s.innerHTML=t;else b.textContent=t}
 function showTab(t){
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('show',p.id==='page-'+t));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===t));
@@ -251,7 +251,7 @@ function runAuth(){
   o.className='output-box show';o.textContent='正在启动认证脚本...\n';s.innerHTML='';
   fetch('/api/run').then(r=>r.json()).then(d=>{
     if(d.error==='busy'){toast('已有任务运行中');_runBusy=false;
-      btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');return}
+      btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');return}
     const tid=d.task_id;
     // 轮询任务结果
     const iv=setInterval(()=>{
@@ -262,14 +262,14 @@ function runAuth(){
         o.textContent=r.output||'(无输出)';
         s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 认证完成</div>'
           :'<div class="status-bar err">&#10007; 执行异常</div>';
-        btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
+        btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
         pollRunStatus();
       }).catch(()=>{clearInterval(iv);_runBusy=false;
-        btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');});
+        btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');});
     },500);
   }).catch(e=>{o.textContent='请求失败: '+e;
     s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';
-    _runBusy=false;btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
+    _runBusy=false;btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
   });
 }
 
@@ -291,7 +291,7 @@ function pollRunStatus(){
       const srcTxt=d.source==='auto'?'(自动)':'(手动)';
       t.innerHTML='■ 停止任务 '+srcTxt;
     }else{
-      btnReset(b,'▶ 立即认证');
+      btnReset(b,'&#9654; 立即认证');
       b.classList.remove('btn-warn');b.classList.add('btn-success');
     }
     // 更新自动认证状态卡片

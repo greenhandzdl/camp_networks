@@ -255,6 +255,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """多线程 HTTP 服务器，避免并发请求阻塞"""
     daemon_threads = True
 
+    def handle_error(self, request, client_address):
+        """抑制无害的 BrokenPipeError / ConnectionResetError"""
+        import traceback, sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return  # 客户端断开连接，无需记录
+        super().handle_error(request, client_address)
+
 
 def main():
     global _server

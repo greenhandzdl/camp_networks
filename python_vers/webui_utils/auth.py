@@ -141,8 +141,8 @@ def get_run_status():
     # 实时检测自动认证配置与 WiFi 状态
     cfg = read_env()
     target = cfg.get("target_essid", "").strip()
-    auto_enabled = (cfg.get("auto_run") == "true" and target
-                    and cfg.get("username") and cfg.get("password"))
+    auto_enabled = bool(cfg.get("auto_run") == "true" and target
+                        and cfg.get("username") and cfg.get("password"))
     if auto_enabled and not _auto_state.get("connected"):
         try:
             ssid = get_wifi_info().get("ssid", "")
