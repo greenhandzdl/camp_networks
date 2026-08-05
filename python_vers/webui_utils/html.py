@@ -112,6 +112,7 @@ border-radius:10px;transition:color .2s}
       <div class="card-title"><span class="icon">&#128196;</span> 运行日志</div>
       <button class="btn btn-outline" onclick="viewLog()">查看日志</button>
       <div class="output-box" id="logOutput"></div>
+      <button class="btn btn-outline" style="margin-top:8px" onclick="clearLog()">清理日志</button>
     </div>
   </div>
 
@@ -244,17 +245,25 @@ function runAuth(){
   if(_runBusy){stopRun();return}
   const b=$('btnRun'),t=$('btnRunText'),o=$('authOutput'),s=$('authStatus');
   btnLoading(b,'认证中...');t.innerHTML='<span class="spinner"></span> 认证中...';
-  o.className='output-box show';o.textContent='正在执行认证脚本...\n';s.innerHTML='';
+  o.className='output-box show';o.textContent='正在启动认证脚本...\n';s.innerHTML='';
   fetch('/api/run').then(r=>r.json()).then(d=>{
-    if(d.error==='busy'){toast('已有任务运行中，请先停止');return}
-    o.textContent=d.output||'(无输出)';
-    s.innerHTML=d.ok?'<div class="status-bar ok">&#10003; 认证完成</div>'
-      :'<div class="status-bar err">&#10007; 执行异常</div>';
+    if(d.error==='busy'){toast('已有任务运行中');btnReset(b,'▶ 立即认证');return}
+    const tid=d.task_id;
+    // 轮询任务结果
+    const iv=setInterval(()=>{
+      fetch('/api/task_result?id='+tid).then(r=>r.json()).then(r=>{
+        if(!r.done)return;
+        clearInterval(iv);
+        o.textContent=r.output||'(无输出)';
+        s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 认证完成</div>'
+          :'<div class="status-bar err">&#10007; 执行异常</div>';
+        btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
+        pollRunStatus();
+      }).catch(()=>{clearInterval(iv)});
+    },500);
   }).catch(e=>{o.textContent='请求失败: '+e;
     s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';
-  }).finally(()=>{
-    if(!_runBusy){btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');}
-    pollRunStatus();
+    btnReset(b,'▶ 立即认证');
   });
 }
 
@@ -328,6 +337,13 @@ function viewLog(){
     o.textContent=(d.content||'(日志为空)');
     o.scrollTop=o.scrollHeight;
   }).catch(()=>{o.textContent='日志加载失败'});
+}
+
+function clearLog(){
+  fetch('/api/clear_log',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.ok){$('logOutput').textContent='(日志已清理)';toast('日志已清理')}
+    else toast('清理失败: '+(d.error||''));
+  }).catch(()=>toast('请求失败'));
 }
 
 function loadNet(manual){

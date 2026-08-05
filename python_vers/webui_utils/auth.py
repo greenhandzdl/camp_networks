@@ -18,19 +18,33 @@ from .network import get_wifi_info
 _run_lock = threading.Lock()
 _current_proc = None          # 当前运行中的认证子进程（Popen）
 _proc_lock = threading.Lock()
+_task_id = 0
+_task_result = None           # {"ok": bool, "output": str} or None
+_task_lock = threading.Lock()
 _auto_state = {
-    "connected": False,         # 是否连上目标 WiFi
-    "connect_time": 0.0,        # 接入目标 WiFi 的时刻
-    "next_run": 0.0,            # 下次计划执行的 unix 时间戳（0 表示无计划）
-    "running_by_auto": False,   # 当前运行的任务是否由自动认证触发
+    "connected": False,
+    "connect_time": 0.0,
+    "next_run": 0.0,
+    "running_by_auto": False,
 }
 
 
-def exec_login():
-    """运行认证脚本，返回 (ok, output)；任务并发时返回 None，可被 stop_login() 终止"""
-    if not _run_lock.acquire(blocking=False):
-        return None
-    global _current_proc
+def _write_log(output):
+    """将认证脚本输出追加写入日志文件"""
+    try:
+        log_path = read_env().get("log_file", "")
+        if log_path:
+            os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+            with open(log_path, "a", errors="replace") as f:
+                f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+                f.write(output + "\n")
+    except Exception:
+        pass
+
+
+def _run_login_thread(is_auto=False):
+    """后台线程：运行认证脚本，结果存入 _task_result"""
+    global _current_proc, _task_id
     try:
         proc = subprocess.Popen(
             [sys.executable, SCRIPT_PATH],
@@ -48,21 +62,56 @@ def exec_login():
             except OSError:
                 pass
             stdout, stderr = proc.communicate()
-            return False, f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"
+            with _task_lock:
+                _task_result = {"ok": False, "output": f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"}
+            return
+
         parts = [stdout.decode(errors="replace")] if stdout else []
         if stderr:
             parts.append(f"\n[STDERR]\n{stderr.decode(errors='replace')}")
-        return returncode == 0, "".join(parts).strip()
+        output = "".join(parts).strip()
+        ok = returncode == 0
+
+        with _task_lock:
+            _task_result = {"ok": ok, "output": output}
+
+        # 写入日志
+        _write_log(output)
+
+        if is_auto:
+            print(f"[自动] 认证{'成功' if ok else '失败'}\n{output}")
     except Exception as e:
-        return False, f"执行失败: {e}"
+        with _task_lock:
+            _task_result = {"ok": False, "output": f"执行失败: {e}"}
     finally:
         with _proc_lock:
             _current_proc = None
         _run_lock.release()
 
 
+def start_login():
+    """启动认证任务（非阻塞），返回 task_id 或 None（已有任务运行）"""
+    global _task_id
+    if not _run_lock.acquire(blocking=False):
+        return None
+    with _task_lock:
+        _task_id += 1
+        _task_result = None
+    tid = _task_id
+    threading.Thread(target=_run_login_thread, daemon=True).start()
+    return tid
+
+
+def get_task_result(task_id):
+    """获取任务结果，返回 {"ok", "output"} 或 None（未完成/任务不存在）"""
+    if task_id != _task_id:
+        return None
+    with _task_lock:
+        return _task_result
+
+
 def stop_login():
-    """终止当前运行中的认证任务（手动或自动均生效）"""
+    """终止当前运行中的认证任务"""
     with _proc_lock:
         p = _current_proc
     if p is None:
@@ -86,17 +135,15 @@ def get_run_status():
     else:
         source = None
 
-    # 实时检测自动认证配置与 WiFi 状态（补充 auto_loop 间歇期的状态延迟）
+    # 实时检测自动认证配置与 WiFi 状态
     cfg = read_env()
     target = cfg.get("target_essid", "").strip()
     auto_enabled = (cfg.get("auto_run") == "true" and target
                     and cfg.get("username") and cfg.get("password"))
     if auto_enabled and not _auto_state.get("connected"):
-        # auto_loop 还未检测到，实时查询 WiFi
         try:
             ssid = get_wifi_info().get("ssid", "")
             if ssid and ssid == target:
-                # 已连接目标 WiFi 但 auto_loop 尚未处理，标记为等待中
                 return {
                     "running": running, "source": source,
                     "auto_enabled": True,
@@ -131,7 +178,6 @@ def auto_loop():
             connected = bool(enabled) and ssid == target
 
             if not connected:
-                # 未连接目标 WiFi：重置调度
                 _auto_state["connected"] = False
                 _auto_state["next_run"] = 0.0
                 continue
@@ -147,22 +193,27 @@ def auto_loop():
                 interval = DEFAULT_AUTO_INTERVAL * 60
 
             if not _auto_state["connected"]:
-                # 刚接入目标 WiFi：记录接入时间，安排延迟后第一次执行
                 _auto_state["connected"] = True
                 _auto_state["connect_time"] = now
                 _auto_state["next_run"] = now + delay
                 print(f"[自动] 已接入 {target}，将在 {delay}s 后触发首次认证")
                 continue
 
-            # 已接入目标 WiFi：检查是否到达执行时间
             if _auto_state["next_run"] <= now:
                 _auto_state["running_by_auto"] = True
-                r = exec_login()
-                _auto_state["running_by_auto"] = False
-                if r is None:
+                # 自动认证也走非阻塞：启动线程 + 轮询等待结果
+                tid = start_login()
+                if tid is None:
                     print("[自动] 已有认证任务在运行，跳过本轮")
                 else:
-                    print(f"[自动] 认证{'成功' if r[0] else '失败'}\n{r[1]}")
+                    # 轮询等待结果（最多 SCRIPT_TIMEOUT + 余量）
+                    deadline = time.time() + SCRIPT_TIMEOUT + 10
+                    while time.time() < deadline:
+                        r = get_task_result(tid)
+                        if r is not None:
+                            break
+                        time.sleep(0.5)
+                _auto_state["running_by_auto"] = False
                 _auto_state["next_run"] = time.time() + interval
         except Exception as e:
             print(f"[自动] 检查异常: {e}")

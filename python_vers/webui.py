@@ -17,7 +17,7 @@ from webui_utils.constants import (
 )
 from webui_utils.config import read_env, write_env, read_port, read_module_prop
 from webui_utils.network import get_wifi_info, get_ip_addresses
-from webui_utils.auth import exec_login, stop_login, get_run_status, auto_loop, _auto_state
+from webui_utils.auth import start_login, get_task_result, stop_login, get_run_status, auto_loop, _auto_state
 from webui_utils.update import check_update, download_update
 from webui_utils.html import HTML_PAGE
 
@@ -49,6 +49,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/config":    "_api_config",
         "/api/prop":      "_api_prop",
         "/api/run":       "_api_run",
+        "/api/task_result": "_api_task_result",
         "/api/run_status": "_api_run_status",
         "/api/network":   "_api_network",
         "/api/log":       "_api_log",
@@ -59,6 +60,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/save_auto":    "_api_save_auto",
         "/api/save_service": "_api_save_service",
         "/api/stop_run":     "_api_stop_run",
+        "/api/clear_log":    "_api_clear_log",
         "/api/do_update":    "_api_do_update",
     }
 
@@ -100,10 +102,24 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._json(read_module_prop())
 
     def _api_run(self):
-        r = exec_login()
+        """启动认证任务（非阻塞），立即返回 task_id"""
+        tid = start_login()
+        if tid is None:
+            return self._json({"ok": False, "error": "busy", "task_id": 0})
+        self._json({"ok": True, "task_id": tid})
+
+    def _api_task_result(self):
+        """轮询任务结果：?id=N"""
+        from urllib.parse import urlparse, parse_qs as _pq
+        qs = _pq(urlparse(self.path).query)
+        try:
+            tid = int(qs.get("id", [0])[0])
+        except (ValueError, IndexError):
+            return self._json({"done": False})
+        r = get_task_result(tid)
         if r is None:
-            return self._json({"ok": False, "error": "busy", "output": "已有认证任务正在运行"})
-        self._json({"ok": r[0], "output": r[1]})
+            return self._json({"done": False})
+        self._json({"done": True, "ok": r["ok"], "output": r["output"]})
 
     def _api_run_status(self):
         self._json(get_run_status())
@@ -111,6 +127,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
     def _api_stop_run(self):
         stopped = stop_login()
         self._json({"ok": stopped, "error": "" if stopped else "无正在运行的任务"})
+
+    def _api_clear_log(self):
+        path = read_env().get("log_file", DEFAULT_LOG_FILE)
+        try:
+            with open(path, "w") as f:
+                pass
+            self._json({"ok": True})
+        except OSError as e:
+            self._json({"ok": False, "error": str(e)})
 
     def _api_network(self):
         self._json({**get_wifi_info(), **get_ip_addresses()})
