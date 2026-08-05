@@ -85,10 +85,34 @@ def get_run_status():
         source = "auto" if _auto_state.get("running_by_auto") else "manual"
     else:
         source = None
+
+    # 实时检测自动认证配置与 WiFi 状态（补充 auto_loop 间歇期的状态延迟）
+    cfg = read_env()
+    target = cfg.get("target_essid", "").strip()
+    auto_enabled = (cfg.get("auto_run") == "true" and target
+                    and cfg.get("username") and cfg.get("password"))
+    if auto_enabled and not _auto_state.get("connected"):
+        # auto_loop 还未检测到，实时查询 WiFi
+        try:
+            ssid = get_wifi_info().get("ssid", "")
+            if ssid and ssid == target:
+                # 已连接目标 WiFi 但 auto_loop 尚未处理，标记为等待中
+                return {
+                    "running": running, "source": source,
+                    "auto_enabled": True,
+                    "auto_connected": False,
+                    "waiting_first": True,
+                    "next_run_in": 0, "has_schedule": False,
+                }
+        except Exception:
+            pass
+
     return {
         "running": running,
         "source": source,
+        "auto_enabled": auto_enabled,
         "auto_connected": _auto_state.get("connected", False),
+        "waiting_first": False,
         "next_run_in": next_in,
         "has_schedule": next_run > now,
     }
@@ -98,7 +122,6 @@ def auto_loop():
     """后台循环：接入目标 ESSID 的 WiFi 延迟 auto_delay 秒后触发首次认证，
     之后按 auto_interval 间隔重跑，断开 WiFi 自动停止"""
     while True:
-        time.sleep(AUTO_CHECK_INTERVAL)
         try:
             cfg = read_env()
             target = cfg.get("target_essid", "").strip()
@@ -143,3 +166,5 @@ def auto_loop():
                 _auto_state["next_run"] = time.time() + interval
         except Exception as e:
             print(f"[自动] 检查异常: {e}")
+        finally:
+            time.sleep(AUTO_CHECK_INTERVAL)

@@ -275,16 +275,23 @@ function pollRunStatus(){
     // 更新自动认证状态卡片
     const el=$('autoStatus');
     let h='';
-    if(!d.auto_connected){
-      h='<div>&#128683; 未连接目标 WiFi，自动认证待命中</div>';
+    if(!d.auto_enabled){
+      h='<div style="color:var(--text2)">&#128683; 自动认证未启用</div>';
     }else if(d.running&&d.source==='auto'){
       h='<div>&#9889; 正在执行自动认证...</div>';
     }else if(d.running&&d.source==='manual'){
       h='<div>&#9881; 手动认证任务运行中</div>';
-    }else if(d.has_schedule){
-      h='<div>&#9200; 距离下次自动执行: <b>'+d.next_run_in+'</b> 秒</div>';
+    }else if(d.auto_connected&&d.has_schedule){
+      const sec=d.next_run_in;
+      h=sec>0
+        ?'<div>&#9200; 已连接目标 WiFi，<b>'+sec+'</b> 秒后自动执行</div>'
+        :'<div>&#9889; 已连接目标 WiFi，即将执行认证...</div>';
+    }else if(d.auto_connected){
+      h='<div>&#9889; 已连接目标 WiFi，即将执行认证...</div>';
+    }else if(d.waiting_first){
+      h='<div>&#9200; 已连接目标 WiFi，等待首次执行...</div>';
     }else{
-      h='<div>&#10003; 已连接目标 WiFi，自动认证待命中</div>';
+      h='<div style="color:var(--text2)">&#128683; 未连接目标 WiFi，等待接入后自动触发</div>';
     }
     h+='<div style="margin-top:4px;font-size:11px;color:var(--text2)">未连接目标 WiFi 时不会触发自动认证</div>';
     el.innerHTML=h;
