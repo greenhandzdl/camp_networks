@@ -3,9 +3,11 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs
 
@@ -14,30 +16,43 @@ try:
 except ImportError:
     requests = None
 
-# ===================== 配置常量 =====================
-CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/modules/drcom-wlan-login")
+# ===================== 路径常量 =====================
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MOD_DIR = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))  # 模块目录
+# 配置目录默认使用独立数据目录（刷入新版模块不会丢失）
+CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/drcom-wlan-login")
 ENV_PATH = os.path.join(CONFIG_DIR, "config.env")
-PROP_PATH = os.path.join(CONFIG_DIR, "module.prop")
-SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wlan_login.py")
+PROP_PATH = os.path.join(MOD_DIR, "module.prop")
+SCRIPT_PATH = os.path.join(SCRIPT_DIR, "wlan_login.py")
 
+# ===================== 行为常量 =====================
 DEFAULT_PORT = 38080
 DEFAULT_SUFFIX = "@cmcc"
+DEFAULT_LOG_FILE = "/data/local/tmp/drcom_webui.log"
+DEFAULT_AUTO_INTERVAL = 5     # 自动认证间隔（分钟）
+AUTO_CHECK_INTERVAL = 30      # 自动认证轮询 WiFi 状态周期（秒）
 GITHUB_REPO = "greenhandzdl/camp_networks_magisk"
 DOWNLOAD_DIR = "/data/local/tmp"
+WLAN_IFACE = "wlan0"
 SCRIPT_TIMEOUT = 60       # 认证脚本超时（秒）
-API_TIMEOUT = 10          # GitHub API 超时（秒）
+API_TIMEOUT = 10          # 系统命令/API 超时（秒）
 SHUTDOWN_DELAY = 1.5      # 端口变更后关闭延迟（秒）
+LOG_TAIL_LINES = 100      # WebUI 查看日志显示行数
 UA = "DrCOM-Magisk"
 
-# 默认配置模板
+# 默认配置模板（_ENV_KEYS 定义写入顺序）
 _ENV_DEFAULTS = {
     "username": "", "password": "", "suffix": DEFAULT_SUFFIX,
     "debug": "false", "port": str(DEFAULT_PORT),
+    "log_file": DEFAULT_LOG_FILE,
+    "auto_run": "false", "target_essid": "", "auto_interval": str(DEFAULT_AUTO_INTERVAL),
 }
+_ENV_KEYS = list(_ENV_DEFAULTS)
 
 # ===================== 全局状态 =====================
 _run_lock = threading.Lock()
 _server = None
+_auto_state = {"last_run": 0.0, "connected": False}
 
 
 # ===================== 配置读写 =====================
@@ -64,7 +79,7 @@ def write_env(**kwargs):
     cfg.update(kwargs)
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(ENV_PATH, "w") as f:
-        for key in ("username", "password", "suffix", "debug", "port"):
+        for key in _ENV_KEYS:
             f.write(f"{key.upper()}={cfg.get(key, '')}\n")
     return cfg
 
@@ -88,6 +103,97 @@ def read_module_prop():
                     k, v = line.split("=", 1)
                     prop[k] = v
     return prop
+
+
+# ===================== 网络信息 =====================
+def get_wifi_info():
+    """通过 dumpsys 获取当前 WiFi 的 SSID/BSSID"""
+    try:
+        out = subprocess.run(["dumpsys", "wifi"], capture_output=True, text=True,
+                             timeout=API_TIMEOUT).stdout
+        m = re.search(r"BSSID:\s*([0-9a-fA-F:]{17})", out)
+        bssid = m.group(1) if m else ""
+        if bssid.lower() == "02:00:00:00:00:00":  # Android 无权限/未连接时的占位值
+            bssid = ""
+        m = re.search(r"SSID:\s*(\S+)", out)
+        ssid = m.group(1).strip('",') if m else ""
+        if ssid.lower() in ("0x", "<unknown", "null") or "unknown" in ssid.lower():
+            ssid = ""
+        return {"ssid": ssid, "bssid": bssid}
+    except Exception:
+        return {"ssid": "", "bssid": ""}
+
+
+def get_ip_addresses():
+    """获取 wlan 接口的 IPv4/IPv6 地址"""
+    ipv4, ipv6 = [], []
+    try:
+        out = subprocess.run(["ip", "addr", "show", WLAN_IFACE], capture_output=True,
+                             text=True, timeout=API_TIMEOUT).stdout
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("inet "):
+                ipv4.append(line.split()[1].split("/")[0])
+            elif line.startswith("inet6 "):
+                addr = line.split()[1].split("/")[0]
+                if not addr.startswith("fe80"):  # 跳过链路本地地址
+                    ipv6.append(addr)
+    except Exception:
+        pass
+    return {"ipv4": ipv4, "ipv6": ipv6}
+
+
+# ===================== 认证执行 =====================
+def _exec_login():
+    """运行认证脚本，返回 (ok, output)；任务并发时返回 None"""
+    if not _run_lock.acquire(blocking=False):
+        return None
+    try:
+        r = subprocess.run(
+            [sys.executable, SCRIPT_PATH],
+            capture_output=True, text=True, timeout=SCRIPT_TIMEOUT,
+            env={**os.environ, "DRCOM_CONFIG_DIR": CONFIG_DIR},
+        )
+        parts = [r.stdout] if r.stdout else []
+        if r.stderr:
+            parts.append(f"\n[STDERR]\n{r.stderr}")
+        return r.returncode == 0, "".join(parts).strip()
+    except subprocess.TimeoutExpired:
+        return False, f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"
+    except Exception as e:
+        return False, f"执行失败: {e}"
+    finally:
+        _run_lock.release()
+
+
+# ===================== 自动认证 =====================
+def _auto_loop():
+    """后台循环：接入目标 ESSID 的 WiFi 时触发认证并按间隔重跑，断开时停止"""
+    while True:
+        time.sleep(AUTO_CHECK_INTERVAL)
+        try:
+            cfg = read_env()
+            target = cfg.get("target_essid", "").strip()
+            enabled = (cfg.get("auto_run") == "true" and target
+                       and cfg.get("username") and cfg.get("password"))
+            ssid = get_wifi_info().get("ssid", "")
+            connected = bool(enabled) and ssid == target
+            if connected:
+                try:
+                    interval = max(1, int(cfg.get("auto_interval", DEFAULT_AUTO_INTERVAL))) * 60
+                except (ValueError, TypeError):
+                    interval = DEFAULT_AUTO_INTERVAL * 60
+                # 刚接入立即触发；之后按间隔重跑
+                if not _auto_state["connected"] or time.time() - _auto_state["last_run"] >= interval:
+                    _auto_state["last_run"] = time.time()
+                    r = _exec_login()
+                    if r is None:
+                        print("[自动] 已有认证任务在运行，跳过本轮")
+                    else:
+                        print(f"[自动] 认证{'成功' if r[0] else '失败'}\n{r[1]}")
+            _auto_state["connected"] = connected
+        except Exception as e:
+            print(f"[自动] 检查异常: {e}")
 
 
 # ===================== GitHub =====================
@@ -224,11 +330,36 @@ font-size:14px;font-weight:500;z-index:999;transition:transform .3s;pointer-even
   </div>
 
   <div class="card">
+    <div class="card-title"><span class="icon">&#9200;</span> 自动认证</div>
+    <div class="toggle-row"><span>启用自动认证</span>
+      <label class="toggle"><input type="checkbox" id="autoRun"><span class="slider"></span></label></div>
+    <div class="form-group"><label>目标 WiFi 名称（ESSID）</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="targetEssid" placeholder="校园网 WiFi 名称" style="flex:1">
+        <button class="btn btn-outline" style="width:auto;padding:12px 14px" onclick="fillEssid()">获取当前</button>
+      </div></div>
+    <div class="form-group"><label>运行间隔（分钟）</label>
+      <input type="number" id="autoInterval" min="1" inputmode="numeric" placeholder="5"></div>
+    <button class="btn btn-primary" id="btnSaveAuto" onclick="saveAuto()">保存自动设置</button>
+    <div class="hint">需已配置账号密码。接入目标 WiFi 立即触发认证并按间隔重跑，断开 WiFi 自动停止。</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">&#128225;</span> 网络状态</div>
+    <div class="update-info" id="netInfo">加载中...</div>
+    <button class="btn btn-outline" style="margin-top:12px" onclick="loadNet(true)">刷新</button>
+  </div>
+
+  <div class="card">
     <div class="card-title"><span class="icon">&#128268;</span> 服务设置</div>
     <div class="form-group"><label>WebUI 端口</label>
       <input type="number" id="port" placeholder="38080" min="1" max="65535" inputmode="numeric"></div>
-    <button class="btn btn-warn" id="btnPort" onclick="savePort()">保存端口并关闭服务</button>
-    <div class="hint">保存后服务将自动停止，需重新通过 Magisk 启动</div>
+    <div class="form-group"><label>日志文件路径</label>
+      <input type="text" id="logFile" placeholder="__LOGFILE__"></div>
+    <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
+    <button class="btn btn-outline" onclick="viewLog()">查看日志</button>
+    <div class="output-box" id="logOutput"></div>
+    <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
   </div>
 
   <div class="card">
@@ -241,16 +372,19 @@ font-size:14px;font-weight:500;z-index:999;transition:transform .3s;pointer-even
 <div class="toast" id="toast"></div>
 
 <script>
-const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__";
+const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__";
 document.addEventListener('DOMContentLoaded',()=>{
   fetch('/api/config').then(r=>r.json()).then(c=>{
     $('username').value=c.username||'';$('password').value=c.password||'';
     $('suffix').value=c.suffix||DFT_SUFFIX;$('debug').checked=c.debug==='true';
-    $('port').value=c.port||DFT_PORT;
+    $('port').value=c.port||DFT_PORT;$('logFile').value=c.log_file||DFT_LOG;
+    $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
+    $('autoInterval').value=c.auto_interval||'5';
   });
   fetch('/api/prop').then(r=>r.json()).then(p=>{
     $('modVer').textContent=(p.name||'')+' '+(p.version||'');
   });
+  loadNet(false);
 });
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2000)}
@@ -279,20 +413,57 @@ function runAuth(){
   }).finally(()=>btnReset(b,'▶ 立即认证'));
 }
 
-function savePort(){
+function saveService(){
   const v=$('port').value.trim(),n=parseInt(v);
   if(!n||n<1||n>65535)return toast('请输入 1-65535 的有效端口号');
-  const b=$('btnPort');btnLoading(b,'保存中...');
-  fetch('/api/save_port',{method:'POST',body:new URLSearchParams({port:v})})
+  const b=$('btnService');btnLoading(b,'保存中...');
+  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value})})
   .then(r=>r.json()).then(d=>{
-    if(d.ok){toast('端口已保存，服务即将关闭...');
+    if(!d.ok){toast('保存失败: '+(d.error||''));return}
+    if(d.port_changed){
       document.body.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text)">'
         +'<div style="font-size:48px;margin-bottom:16px">&#9889;</div>'
         +'<div style="font-size:18px;font-weight:600">服务已停止</div>'
         +'<div style="font-size:13px;color:var(--text2);margin-top:8px">新端口: '+n
         +'<br>请通过 Magisk Manager 重新启动 WebUI</div></div>';
-    }else{toast('保存失败: '+d.error);btnReset(b,'保存端口并关闭服务')}
-  }).catch(()=>{toast('网络错误');btnReset(b,'保存端口并关闭服务')});
+    }else toast('服务设置已保存');
+  }).catch(()=>toast('网络错误')).finally(()=>btnReset(b,'保存服务设置'));
+}
+
+function viewLog(){
+  const o=$('logOutput');o.className='output-box show';o.textContent='加载中...';
+  fetch('/api/log').then(r=>r.json()).then(d=>{
+    o.textContent=(d.content||'(日志为空)');
+    o.scrollTop=o.scrollHeight;
+  }).catch(()=>{o.textContent='日志加载失败'});
+}
+
+function loadNet(manual){
+  const el=$('netInfo');
+  if(manual)el.innerHTML='加载中...';
+  fetch('/api/network').then(r=>r.json()).then(d=>{
+    el.innerHTML='<div>WiFi: '+(d.ssid||'未连接')+'</div>'
+      +'<div>BSSID: '+(d.bssid||'-')+'</div>'
+      +'<div>IPv4: '+((d.ipv4&&d.ipv4.length)?d.ipv4.join(', '):'-')+'</div>'
+      +'<div>IPv6: '+((d.ipv6&&d.ipv6.length)?d.ipv6.join(', '):'-')+'</div>';
+  }).catch(()=>{el.innerHTML='<div class="status-bar err">获取网络信息失败</div>'});
+}
+
+function fillEssid(){
+  fetch('/api/network').then(r=>r.json()).then(d=>{
+    if(d.ssid){$('targetEssid').value=d.ssid;toast('已填充当前 WiFi 名称')}
+    else toast('未连接 WiFi 或无法获取 WiFi 名称');
+  }).catch(()=>toast('获取失败'));
+}
+
+function saveAuto(){
+  const b=$('btnSaveAuto');btnLoading(b,'保存中...');
+  fetch('/api/save_auto',{method:'POST',body:new URLSearchParams({
+    auto_run:$('autoRun').checked?'true':'false',
+    target_essid:$('targetEssid').value,
+    auto_interval:$('autoInterval').value})})
+  .then(r=>r.json()).then(d=>toast(d.ok?'自动设置已保存':'保存失败: '+(d.error||'')))
+  .catch(()=>toast('网络错误')).finally(()=>btnReset(b,'保存自动设置'));
 }
 
 function checkUpdate(){
@@ -358,12 +529,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/config":    "_api_config",
         "/api/prop":      "_api_prop",
         "/api/run":       "_api_run",
+        "/api/network":   "_api_network",
+        "/api/log":       "_api_log",
         "/api/check_update": "_api_check_update",
         "/api/do_update": "_api_do_update",
     }
     _POST_ROUTES = {
-        "/api/save":      "_api_save",
-        "/api/save_port": "_api_save_port",
+        "/api/save":         "_api_save",
+        "/api/save_auto":    "_api_save_auto",
+        "/api/save_service": "_api_save_service",
     }
 
     def do_GET(self):
@@ -383,7 +557,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     # ---------- GET 处理 ----------
     def _serve_html(self):
-        html = HTML_PAGE.replace("__SUFFIX__", DEFAULT_SUFFIX).replace("__PORT__", str(DEFAULT_PORT))
+        html = (HTML_PAGE.replace("__SUFFIX__", DEFAULT_SUFFIX)
+                .replace("__PORT__", str(DEFAULT_PORT))
+                .replace("__LOGFILE__", DEFAULT_LOG_FILE))
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -397,24 +573,22 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._json(read_module_prop())
 
     def _api_run(self):
-        if not _run_lock.acquire(blocking=False):
+        r = _exec_login()
+        if r is None:
             return self._json({"ok": False, "output": "已有认证任务正在运行"})
+        self._json({"ok": r[0], "output": r[1]})
+
+    def _api_network(self):
+        self._json({**get_wifi_info(), **get_ip_addresses()})
+
+    def _api_log(self):
+        path = read_env().get("log_file", DEFAULT_LOG_FILE)
         try:
-            r = subprocess.run(
-                [sys.executable, SCRIPT_PATH],
-                capture_output=True, text=True, timeout=SCRIPT_TIMEOUT,
-                env={**os.environ, "DRCOM_CONFIG_DIR": CONFIG_DIR},
-            )
-            parts = [r.stdout] if r.stdout else []
-            if r.stderr:
-                parts.append(f"\n[STDERR]\n{r.stderr}")
-            self._json({"ok": r.returncode == 0, "output": "".join(parts).strip()})
-        except subprocess.TimeoutExpired:
-            self._json({"ok": False, "output": f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"})
-        except Exception as e:
-            self._json({"ok": False, "output": f"执行失败: {e}"})
-        finally:
-            _run_lock.release()
+            with open(path, "r", errors="replace") as f:
+                content = "".join(f.readlines()[-LOG_TAIL_LINES:])
+        except OSError as e:
+            content = f"无法读取日志: {e}"
+        self._json({"path": path, "content": content})
 
     def _api_check_update(self):
         ver = read_module_prop().get("version", "unknown")
@@ -464,7 +638,21 @@ class WebUIHandler(BaseHTTPRequestHandler):
         )
         self._json({"ok": True})
 
-    def _api_save_port(self):
+    def _api_save_auto(self):
+        p = self._post_params()
+        auto_run = self._param(p, "auto_run", "false").lower() in ("true", "1")
+        try:
+            interval = int(self._param(p, "auto_interval", str(DEFAULT_AUTO_INTERVAL)))
+            if interval < 1:
+                raise ValueError
+        except ValueError:
+            return self._json({"ok": False, "error": "间隔需为不小于 1 的整数（分钟）"})
+        write_env(auto_run=str(auto_run).lower(),
+                  target_essid=self._param(p, "target_essid"),
+                  auto_interval=str(interval))
+        self._json({"ok": True})
+
+    def _api_save_service(self):
         p = self._post_params()
         try:
             port = int(self._param(p, "port"))
@@ -472,9 +660,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             return self._json({"ok": False, "error": "端口范围 1-65535"})
-        write_env(port=str(port))
-        self._json({"ok": True})
-        threading.Timer(SHUTDOWN_DELAY, _shutdown).start()
+        log_file = self._param(p, "log_file", DEFAULT_LOG_FILE)
+        port_changed = port != read_port()
+        write_env(port=str(port), log_file=log_file)
+        self._json({"ok": True, "port_changed": port_changed})
+        if port_changed:
+            threading.Timer(SHUTDOWN_DELAY, _shutdown).start()
 
 
 def _shutdown():
@@ -487,6 +678,7 @@ def _shutdown():
 
 def main():
     global _server
+    threading.Thread(target=_auto_loop, daemon=True).start()
     port = read_port()
     _server = HTTPServer(("0.0.0.0", port), WebUIHandler)
     print(f"WebUI 已启动，请访问 http://127.0.0.1:{port}")
