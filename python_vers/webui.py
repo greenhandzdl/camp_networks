@@ -33,6 +33,7 @@ DEFAULT_DOWNLOAD_DIR = "/sdcard/Download"   # 更新包下载目录（可在 Web
 DEFAULT_AUTO_INTERVAL = 5     # 自动认证间隔（分钟）
 AUTO_CHECK_INTERVAL = 30      # 自动认证轮询 WiFi 状态周期（秒）
 GITHUB_REPO = "greenhandzdl/camp_networks_magisk"
+CDN_BASE = "https://cdn.jsdelivr.net/gh"   # jsDelivr CDN（国内访问 GitHub 不稳定，优先走 CDN）
 WLAN_IFACE = "wlan0"
 SCRIPT_TIMEOUT = 60       # 认证脚本超时（秒）
 API_TIMEOUT = 10          # 系统命令/API 超时（秒）
@@ -196,31 +197,33 @@ def _auto_loop():
             print(f"[自动] 检查异常: {e}")
 
 
-# ===================== GitHub =====================
-def check_github_release():
+# ===================== 更新检测（CDN 优先，GitHub 直连兜底） =====================
+def check_update():
+    """通过 update.json 检测更新，返回 (release, err)"""
     if requests is None:
         return None, "requests 库未安装"
-    try:
-        resp = requests.get(
-            f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
-            timeout=API_TIMEOUT, headers={"User-Agent": UA},
-        )
-        if resp.status_code == 404:
-            return None, "暂无 Release"
-        resp.raise_for_status()
-        d = resp.json()
-        return {
-            "tag": d.get("tag_name", ""),
-            "name": d.get("name", ""),
-            "body": d.get("body", ""),
-            "html_url": d.get("html_url", ""),
-            "assets": [
-                {"name": a["name"], "url": a["browser_download_url"], "size": a.get("size", 0)}
-                for a in d.get("assets", [])
-            ],
-        }, None
-    except Exception as e:
-        return None, str(e)
+    urls = [
+        f"{CDN_BASE}/{GITHUB_REPO}@main/update.json",
+        f"https://github.com/{GITHUB_REPO}/releases/latest/download/update.json",
+    ]
+    last_err = ""
+    for url in urls:
+        try:
+            resp = requests.get(url, timeout=API_TIMEOUT, headers={"User-Agent": UA})
+            resp.raise_for_status()
+            d = resp.json()
+            tag = d.get("version", "")
+            return {
+                "tag": tag,
+                "versionCode": int(d.get("versionCode", 0)),
+                "html_url": d.get("changelog", ""),
+                # CDN 加速分支托管 zip（jsDelivr 不支持 Release 资产直连）
+                "zip_url": f"{CDN_BASE}/{GITHUB_REPO}@releases/{tag}.zip",
+                "zip_fallback": f"https://github.com/{GITHUB_REPO}/releases/download/{tag}/drcom-wlan-login.zip",
+            }, None
+        except Exception as e:
+            last_err = str(e)
+    return None, last_err
 
 
 # ===================== HTML 模板 =====================
@@ -286,9 +289,7 @@ color:var(--text);display:none}
 .update-info{font-size:13px;color:var(--text2);line-height:1.6}
 .update-info .tag{display:inline-block;background:var(--primary);color:#fff;padding:2px 8px;
 border-radius:6px;font-size:12px;font-weight:600}
-.changelog{margin-top:10px;padding:10px;background:var(--bg);border-radius:8px;
-font-size:12px;max-height:150px;overflow-y:auto;white-space:pre-wrap;color:var(--text2);display:none}
-.changelog.show{display:block}
+.update-info a{text-decoration:none}
 .spinner{display:inline-block;width:18px;height:18px;border:2px solid transparent;
 border-top-color:currentColor;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -328,7 +329,6 @@ border-radius:10px;transition:color .2s}
       <div class="card-title"><span class="icon">&#128230;</span> 模块更新</div>
       <button class="btn btn-outline" id="btnCheck" onclick="checkUpdate()">检查更新</button>
       <div class="update-info hidden" id="updateInfo"></div>
-      <div class="changelog" id="changelog"></div>
     </div>
     <div class="card">
       <div class="card-title"><span class="icon">&#128196;</span> 运行日志</div>
@@ -504,23 +504,19 @@ function saveAuto(){
 }
 
 function checkUpdate(){
-  const b=$('btnCheck'),info=$('updateInfo'),cl=$('changelog');
-  btnLoading(b,'检查中...');info.className='update-info hidden';cl.className='changelog';
+  const b=$('btnCheck'),info=$('updateInfo');
+  btnLoading(b,'检查中...');info.className='update-info hidden';
   fetch('/api/check_update').then(r=>r.json()).then(d=>{
     if(d.error){info.innerHTML='<div class="status-bar warn">&#9888; '+d.error+'</div>';
       info.className='update-info';return}
-    const rel=d.release,cur=d.current_version||'unknown',isNewer=d.has_update;
-    let h='';
-    if(isNewer){
+    const rel=d.release,cur=d.current_version||'unknown';let h='';
+    if(d.has_update){
       h='<div class="status-bar info">&#127881; 发现新版本 <span class="tag">'+rel.tag+'</span></div>'
-       +'<div style="margin:8px 0;font-size:13px;color:var(--text)">'+(rel.name||'')+'</div>';
-      if(rel.assets&&rel.assets.length){h+='<div style="font-size:12px;color:var(--text2);margin-bottom:10px">';
-        rel.assets.forEach(a=>{h+='&#128196; '+a.name+' ('+(a.size/1024).toFixed(1)+' KB)<br>'});h+='</div>'}
-      h+='<button class="btn btn-warn" onclick="doUpdate()">下载并安装更新</button>';
+       +'<button class="btn btn-warn" onclick="doUpdate()">下载并安装更新</button>'
+       +(rel.html_url?'<div class="hint"><a href="'+rel.html_url+'" target="_blank">查看更新日志</a></div>':'');
     }else{h='<div class="status-bar ok">&#10003; 当前已是最新版本 ('+cur+')</div>'}
     info.innerHTML=h;info.className='update-info';
-    if(rel.body){cl.textContent=rel.body;cl.className='changelog show'}
-    if(!isNewer)b.style.display='none';
+    if(!d.has_update)b.style.display='none';
   }).catch(e=>{info.innerHTML='<div class="status-bar err">检查失败: '+e+'</div>';
     info.className='update-info';
   }).finally(()=>{b.disabled=false;if(b.style.display!=='none')b.textContent='重新检查'});
@@ -630,38 +626,51 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._json({"path": path, "content": content})
 
     def _api_check_update(self):
-        ver = read_module_prop().get("version", "unknown")
-        release, err = check_github_release()
+        prop = read_module_prop()
+        ver = prop.get("version", "unknown")
+        try:
+            cur_code = int(prop.get("versionCode", 0))
+        except ValueError:
+            cur_code = 0
+        release, err = check_update()
         if err:
             return self._json({"error": err, "current_version": ver})
         self._json({
             "release": release, "current_version": ver,
-            "has_update": release["tag"] != ver and release["tag"] > ver,
+            "has_update": release["versionCode"] > cur_code,
         })
 
     def _api_do_update(self):
         if requests is None:
             return self._json({"ok": False, "error": "requests 库未安装", "output": ""})
         try:
-            release, err = check_github_release()
+            release, err = check_update()
             if not release:
-                return self._json({"ok": False, "error": err or "无法获取 Release", "output": ""})
-            zip_asset = next((a for a in release["assets"] if a["name"].endswith(".zip")), None)
-            if not zip_asset:
-                return self._json({"ok": False, "error": "Release 中未找到 .zip 文件", "output": ""})
+                return self._json({"ok": False, "error": err or "无法获取更新信息", "output": ""})
 
             dl_dir = read_env().get("download_dir", DEFAULT_DOWNLOAD_DIR) or DEFAULT_DOWNLOAD_DIR
             os.makedirs(dl_dir, exist_ok=True)
             dl_path = os.path.join(dl_dir, "drcom_update.zip")
-            resp = requests.get(zip_asset["url"], timeout=SCRIPT_TIMEOUT, stream=True,
-                                headers={"User-Agent": UA})
-            resp.raise_for_status()
-            with open(dl_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
+
+            # CDN 下载，失败则回退 GitHub 直连
+            last_err, source = "", ""
+            for source, url in (("CDN", release["zip_url"]), ("直连", release["zip_fallback"])):
+                try:
+                    resp = requests.get(url, timeout=SCRIPT_TIMEOUT, stream=True,
+                                        headers={"User-Agent": UA})
+                    resp.raise_for_status()
+                    with open(dl_path, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    break
+                except Exception as e:
+                    last_err = str(e)
+            else:
+                return self._json({"ok": False,
+                                   "error": f"下载失败（CDN/直连均不可用）: {last_err}", "output": ""})
 
             size_kb = os.path.getsize(dl_path) / 1024
-            out = f"已下载: {zip_asset['name']} ({size_kb:.1f} KB)\n保存到: {dl_path}\n"
+            out = f"已下载: drcom-wlan-login.zip ({size_kb:.1f} KB, 来源: {source})\n保存到: {dl_path}\n"
             out += "请在 Magisk Manager 中从本地安装此 zip 文件完成更新。"
             self._json({"ok": True, "output": out})
         except Exception as e:
