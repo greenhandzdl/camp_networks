@@ -8,9 +8,9 @@ import threading
 import time
 
 from .constants import (
-    SCRIPT_PATH, CONFIG_DIR, SCRIPT_TIMEOUT,
     AUTO_CHECK_INTERVAL, DEFAULT_AUTO_DELAY, DEFAULT_AUTO_INTERVAL,
 )
+from . import constants as _C
 from .config import read_env
 from .network import get_wifi_info
 
@@ -31,15 +31,17 @@ _auto_state = {
 
 def _write_log(output):
     """将认证脚本输出追加写入日志文件"""
+    log_path = ""
     try:
-        log_path = read_env().get("log_file", "")
-        if log_path:
-            os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
-            with open(log_path, "a", errors="replace") as f:
-                f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
-                f.write(output + "\n")
-    except Exception:
-        pass
+        log_path = read_env().get("log_file", "") or "/data/local/tmp/drcom_webui.log"
+        log_dir = os.path.dirname(log_path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        with open(log_path, "a", errors="replace") as f:
+            f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+            f.write(output + "\n")
+    except Exception as e:
+        print(f"[日志写入失败] path={log_path!r}, error={e}")
 
 
 def _run_login_thread(is_auto=False):
@@ -49,14 +51,14 @@ def _run_login_thread(is_auto=False):
     ok = False
     try:
         proc = subprocess.Popen(
-            [sys.executable, SCRIPT_PATH],
+            [sys.executable, _C.SCRIPT_PATH],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            env={**os.environ, "DRCOM_CONFIG_DIR": CONFIG_DIR},
+            env={**os.environ, "DRCOM_CONFIG_DIR": _C.CONFIG_DIR},
         )
         with _proc_lock:
             _current_proc = proc
         try:
-            raw, _ = proc.communicate(timeout=SCRIPT_TIMEOUT)
+            raw, _ = proc.communicate(timeout=_C.SCRIPT_TIMEOUT)
             returncode = proc.returncode
             output = raw.decode(errors="replace").strip() if raw else ""
             ok = returncode == 0
@@ -67,7 +69,7 @@ def _run_login_thread(is_auto=False):
                 pass
             raw, _ = proc.communicate()
             captured = raw.decode(errors="replace").strip() if raw else ""
-            output = f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"
+            output = f"认证脚本执行超时（{_C.SCRIPT_TIMEOUT}s）"
             if captured:
                 output += f"\n--- 超时前输出 ---\n{captured}"
             ok = False
@@ -75,13 +77,15 @@ def _run_login_thread(is_auto=False):
         output = f"执行失败: {e}"
         ok = False
     finally:
+        # 确保有输出内容（即使脚本无输出也记录状态）
+        if not output:
+            output = f"[脚本无输出] returncode={ok}, 请检查 wlan_login.py 是否正常"
         with _task_lock:
             global _task_result
             _task_result = {"ok": ok, "output": output}
         # 无论成功/失败/超时/异常，都写入日志
-        if output:
-            _write_log(output)
-        if is_auto and output:
+        _write_log(output)
+        if is_auto:
             print(f"[自动] 认证{'成功' if ok else '失败'}\n{output}")
         with _proc_lock:
             _current_proc = None
@@ -206,7 +210,7 @@ def auto_loop():
                     print("[自动] 已有认证任务在运行，跳过本轮")
                 else:
                     # 轮询等待结果（最多 SCRIPT_TIMEOUT + 余量）
-                    deadline = time.time() + SCRIPT_TIMEOUT + 10
+                    deadline = time.time() + _C.SCRIPT_TIMEOUT + 10
                     while time.time() < deadline:
                         r = get_task_result(tid)
                         if r is not None:
