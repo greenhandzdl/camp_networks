@@ -244,26 +244,32 @@ function saveConfig(){
 function runAuth(){
   if(_runBusy){stopRun();return}
   const b=$('btnRun'),t=$('btnRunText'),o=$('authOutput'),s=$('authStatus');
-  btnLoading(b,'认证中...');t.innerHTML='<span class="spinner"></span> 认证中...';
+  // 立即切换按钮为停止状态
+  _runBusy=true;
+  b.disabled=false;b.classList.remove('btn-success');b.classList.add('btn-warn');
+  t.innerHTML='■ 停止任务 (手动)';
   o.className='output-box show';o.textContent='正在启动认证脚本...\n';s.innerHTML='';
   fetch('/api/run').then(r=>r.json()).then(d=>{
-    if(d.error==='busy'){toast('已有任务运行中');btnReset(b,'▶ 立即认证');return}
+    if(d.error==='busy'){toast('已有任务运行中');_runBusy=false;
+      btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');return}
     const tid=d.task_id;
     // 轮询任务结果
     const iv=setInterval(()=>{
       fetch('/api/task_result?id='+tid).then(r=>r.json()).then(r=>{
         if(!r.done)return;
         clearInterval(iv);
+        _runBusy=false;
         o.textContent=r.output||'(无输出)';
         s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 认证完成</div>'
           :'<div class="status-bar err">&#10007; 执行异常</div>';
         btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
         pollRunStatus();
-      }).catch(()=>{clearInterval(iv)});
+      }).catch(()=>{clearInterval(iv);_runBusy=false;
+        btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');});
     },500);
   }).catch(e=>{o.textContent='请求失败: '+e;
     s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';
-    btnReset(b,'▶ 立即认证');
+    _runBusy=false;btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
   });
 }
 

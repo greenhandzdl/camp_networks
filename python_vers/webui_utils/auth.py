@@ -44,46 +44,45 @@ def _write_log(output):
 
 def _run_login_thread(is_auto=False):
     """后台线程：运行认证脚本，结果存入 _task_result"""
-    global _current_proc, _task_id
+    global _current_proc
+    output = ""
+    ok = False
     try:
         proc = subprocess.Popen(
             [sys.executable, SCRIPT_PATH],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             env={**os.environ, "DRCOM_CONFIG_DIR": CONFIG_DIR},
         )
         with _proc_lock:
             _current_proc = proc
         try:
-            stdout, stderr = proc.communicate(timeout=SCRIPT_TIMEOUT)
+            raw, _ = proc.communicate(timeout=SCRIPT_TIMEOUT)
             returncode = proc.returncode
+            output = raw.decode(errors="replace").strip() if raw else ""
+            ok = returncode == 0
         except subprocess.TimeoutExpired:
             try:
                 proc.kill()
             except OSError:
                 pass
-            stdout, stderr = proc.communicate()
-            with _task_lock:
-                _task_result = {"ok": False, "output": f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"}
-            return
-
-        parts = [stdout.decode(errors="replace")] if stdout else []
-        if stderr:
-            parts.append(f"\n[STDERR]\n{stderr.decode(errors='replace')}")
-        output = "".join(parts).strip()
-        ok = returncode == 0
-
-        with _task_lock:
-            _task_result = {"ok": ok, "output": output}
-
-        # 写入日志
-        _write_log(output)
-
-        if is_auto:
-            print(f"[自动] 认证{'成功' if ok else '失败'}\n{output}")
+            raw, _ = proc.communicate()
+            captured = raw.decode(errors="replace").strip() if raw else ""
+            output = f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"
+            if captured:
+                output += f"\n--- 超时前输出 ---\n{captured}"
+            ok = False
     except Exception as e:
-        with _task_lock:
-            _task_result = {"ok": False, "output": f"执行失败: {e}"}
+        output = f"执行失败: {e}"
+        ok = False
     finally:
+        with _task_lock:
+            global _task_result
+            _task_result = {"ok": ok, "output": output}
+        # 无论成功/失败/超时/异常，都写入日志
+        if output:
+            _write_log(output)
+        if is_auto and output:
+            print(f"[自动] 认证{'成功' if ok else '失败'}\n{output}")
         with _proc_lock:
             _current_proc = None
         _run_lock.release()
