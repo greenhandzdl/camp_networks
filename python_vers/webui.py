@@ -29,10 +29,10 @@ SCRIPT_PATH = os.path.join(SCRIPT_DIR, "wlan_login.py")
 DEFAULT_PORT = 38080
 DEFAULT_SUFFIX = "@cmcc"
 DEFAULT_LOG_FILE = "/data/local/tmp/drcom_webui.log"
+DEFAULT_DOWNLOAD_DIR = "/sdcard/Download"   # 更新包下载目录（可在 WebUI 修改）
 DEFAULT_AUTO_INTERVAL = 5     # 自动认证间隔（分钟）
 AUTO_CHECK_INTERVAL = 30      # 自动认证轮询 WiFi 状态周期（秒）
 GITHUB_REPO = "greenhandzdl/camp_networks_magisk"
-DOWNLOAD_DIR = "/data/local/tmp"
 WLAN_IFACE = "wlan0"
 SCRIPT_TIMEOUT = 60       # 认证脚本超时（秒）
 API_TIMEOUT = 10          # 系统命令/API 超时（秒）
@@ -40,11 +40,11 @@ SHUTDOWN_DELAY = 1.5      # 端口变更后关闭延迟（秒）
 LOG_TAIL_LINES = 100      # WebUI 查看日志显示行数
 UA = "DrCOM-Magisk"
 
-# 默认配置模板（_ENV_KEYS 定义写入顺序）
+# 所有可配置项统一定义在此（写入 config.env，_ENV_KEYS 定义写入顺序）
 _ENV_DEFAULTS = {
     "username": "", "password": "", "suffix": DEFAULT_SUFFIX,
     "debug": "false", "port": str(DEFAULT_PORT),
-    "log_file": DEFAULT_LOG_FILE,
+    "log_file": DEFAULT_LOG_FILE, "download_dir": DEFAULT_DOWNLOAD_DIR,
     "auto_run": "false", "target_essid": "", "auto_interval": str(DEFAULT_AUTO_INTERVAL),
 }
 _ENV_KEYS = list(_ENV_DEFAULTS)
@@ -238,7 +238,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
 html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,
 "Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.5;
 min-height:100vh;-webkit-tap-highlight-color:transparent}
-.container{max-width:480px;margin:0 auto;padding:16px 16px 32px}
+.container{max-width:480px;margin:0 auto;padding:16px 16px 92px}
 .header{text-align:center;padding:20px 0 12px}
 .header h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,var(--primary-light),var(--primary));
 -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -293,11 +293,21 @@ font-size:12px;max-height:150px;overflow-y:auto;white-space:pre-wrap;color:var(-
 border-top-color:currentColor;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .hidden{display:none}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+.toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%) translateY(80px);
 background:var(--card);border:1px solid var(--border);padding:12px 24px;border-radius:12px;
 font-size:14px;font-weight:500;z-index:999;transition:transform .3s;pointer-events:none}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .hint{font-size:11px;color:var(--text2);margin-top:8px}
+.page{display:none}
+.page.show{display:block;animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:rgba(26,26,36,.92);
+backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);
+padding:6px 4px calc(6px + env(safe-area-inset-bottom));z-index:100}
+.nav-item{flex:1;text-align:center;font-size:11px;color:var(--text2);padding:4px 0;cursor:pointer;
+border-radius:10px;transition:color .2s}
+.nav-item .nicon{font-size:20px;display:block;margin-bottom:1px}
+.nav-item.active{color:var(--primary-light)}
 </style>
 </head>
 <body>
@@ -307,79 +317,102 @@ font-size:14px;font-weight:500;z-index:999;transition:transform .3s;pointer-even
     <div class="ver" id="modVer"></div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">&#9881;</span> 认证配置</div>
-    <div class="form-group"><label>账号</label>
-      <input type="text" id="username" placeholder="学号/工号" autocomplete="off"></div>
-    <div class="form-group"><label>密码</label>
-      <input type="password" id="password" placeholder="认证密码"></div>
-    <div class="form-group"><label>运营商后缀</label>
-      <input type="text" id="suffix" placeholder="@cmcc"></div>
-    <div class="toggle-row"><span>调试模式</span>
-      <label class="toggle"><input type="checkbox" id="debug"><span class="slider"></span></label></div>
-    <div style="margin-top:16px">
-      <button class="btn btn-primary" id="btnSave" onclick="saveConfig()">保存配置</button></div>
+  <!-- 状态页 -->
+  <div id="page-status" class="page show">
+    <div class="card">
+      <div class="card-title"><span class="icon">&#128225;</span> 网络状态</div>
+      <div class="update-info" id="netInfo">加载中...</div>
+      <button class="btn btn-outline" style="margin-top:12px" onclick="loadNet(true)">刷新</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">&#128230;</span> 模块更新</div>
+      <button class="btn btn-outline" id="btnCheck" onclick="checkUpdate()">检查更新</button>
+      <div class="update-info hidden" id="updateInfo"></div>
+      <div class="changelog" id="changelog"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">&#128196;</span> 运行日志</div>
+      <button class="btn btn-outline" onclick="viewLog()">查看日志</button>
+      <div class="output-box" id="logOutput"></div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">&#9889;</span> 认证操作</div>
-    <div id="authStatus"></div>
-    <button class="btn btn-success" id="btnRun" onclick="runAuth()">
-      <span id="btnRunText">&#9654; 立即认证</span></button>
-    <div class="output-box" id="authOutput"></div>
+  <!-- 认证页 -->
+  <div id="page-auth" class="page">
+    <div class="card">
+      <div class="card-title"><span class="icon">&#128273;</span> 认证配置</div>
+      <div class="form-group"><label>账号</label>
+        <input type="text" id="username" placeholder="学号/工号" autocomplete="off"></div>
+      <div class="form-group"><label>密码</label>
+        <input type="password" id="password" placeholder="认证密码"></div>
+      <div class="form-group"><label>运营商后缀</label>
+        <input type="text" id="suffix" placeholder="@cmcc"></div>
+      <div class="toggle-row"><span>调试模式</span>
+        <label class="toggle"><input type="checkbox" id="debug"><span class="slider"></span></label></div>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" id="btnSave" onclick="saveConfig()">保存配置</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">&#9889;</span> 认证操作</div>
+      <div id="authStatus"></div>
+      <button class="btn btn-success" id="btnRun" onclick="runAuth()">
+        <span id="btnRunText">&#9654; 立即认证</span></button>
+      <div class="output-box" id="authOutput"></div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">&#9200;</span> 自动认证</div>
-    <div class="toggle-row"><span>启用自动认证</span>
-      <label class="toggle"><input type="checkbox" id="autoRun"><span class="slider"></span></label></div>
-    <div class="form-group"><label>目标 WiFi 名称（ESSID）</label>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="targetEssid" placeholder="校园网 WiFi 名称" style="flex:1">
-        <button class="btn btn-outline" style="width:auto;padding:12px 14px" onclick="fillEssid()">获取当前</button>
-      </div></div>
-    <div class="form-group"><label>运行间隔（分钟）</label>
-      <input type="number" id="autoInterval" min="1" inputmode="numeric" placeholder="5"></div>
-    <button class="btn btn-primary" id="btnSaveAuto" onclick="saveAuto()">保存自动设置</button>
-    <div class="hint">需已配置账号密码。接入目标 WiFi 立即触发认证并按间隔重跑，断开 WiFi 自动停止。</div>
+  <!-- 自动页 -->
+  <div id="page-auto" class="page">
+    <div class="card">
+      <div class="card-title"><span class="icon">&#9200;</span> 自动认证</div>
+      <div class="toggle-row"><span>启用自动认证</span>
+        <label class="toggle"><input type="checkbox" id="autoRun"><span class="slider"></span></label></div>
+      <div class="form-group"><label>目标 WiFi 名称（ESSID）</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="targetEssid" placeholder="校园网 WiFi 名称" style="flex:1">
+          <button class="btn btn-outline" style="width:auto;padding:12px 14px" onclick="fillEssid()">获取当前</button>
+        </div></div>
+      <div class="form-group"><label>运行间隔（分钟）</label>
+        <input type="number" id="autoInterval" min="1" inputmode="numeric" placeholder="__INTERVAL__"></div>
+      <button class="btn btn-primary" id="btnSaveAuto" onclick="saveAuto()">保存自动设置</button>
+      <div class="hint">需已配置账号密码。接入目标 WiFi 立即触发认证并按间隔重跑，断开 WiFi 自动停止。</div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">&#128225;</span> 网络状态</div>
-    <div class="update-info" id="netInfo">加载中...</div>
-    <button class="btn btn-outline" style="margin-top:12px" onclick="loadNet(true)">刷新</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="icon">&#128268;</span> 服务设置</div>
-    <div class="form-group"><label>WebUI 端口</label>
-      <input type="number" id="port" placeholder="38080" min="1" max="65535" inputmode="numeric"></div>
-    <div class="form-group"><label>日志文件路径</label>
-      <input type="text" id="logFile" placeholder="__LOGFILE__"></div>
-    <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
-    <button class="btn btn-outline" onclick="viewLog()">查看日志</button>
-    <div class="output-box" id="logOutput"></div>
-    <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="icon">&#128230;</span> 模块更新</div>
-    <button class="btn btn-outline" id="btnCheck" onclick="checkUpdate()">检查更新</button>
-    <div class="update-info hidden" id="updateInfo"></div>
-    <div class="changelog" id="changelog"></div>
+  <!-- 设置页 -->
+  <div id="page-settings" class="page">
+    <div class="card">
+      <div class="card-title"><span class="icon">&#128268;</span> 服务设置</div>
+      <div class="form-group"><label>WebUI 端口</label>
+        <input type="number" id="port" placeholder="__PORT__" min="1" max="65535" inputmode="numeric"></div>
+      <div class="form-group"><label>日志文件路径</label>
+        <input type="text" id="logFile" placeholder="__LOGFILE__"></div>
+      <div class="form-group"><label>更新包下载目录</label>
+        <input type="text" id="downloadDir" placeholder="__DOWNLOAD__"></div>
+      <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
+      <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
+    </div>
   </div>
 </div>
+
+<nav class="nav">
+  <div class="nav-item active" data-tab="status" onclick="showTab('status')"><span class="nicon">&#128225;</span>状态</div>
+  <div class="nav-item" data-tab="auth" onclick="showTab('auth')"><span class="nicon">&#128273;</span>认证</div>
+  <div class="nav-item" data-tab="auto" onclick="showTab('auto')"><span class="nicon">&#9200;</span>自动</div>
+  <div class="nav-item" data-tab="settings" onclick="showTab('settings')"><span class="nicon">&#9881;</span>设置</div>
+</nav>
 <div class="toast" id="toast"></div>
 
 <script>
-const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__";
+const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__",DFT_DL="__DOWNLOAD__",DFT_INT="__INTERVAL__";
 document.addEventListener('DOMContentLoaded',()=>{
   fetch('/api/config').then(r=>r.json()).then(c=>{
     $('username').value=c.username||'';$('password').value=c.password||'';
     $('suffix').value=c.suffix||DFT_SUFFIX;$('debug').checked=c.debug==='true';
     $('port').value=c.port||DFT_PORT;$('logFile').value=c.log_file||DFT_LOG;
+    $('downloadDir').value=c.download_dir||DFT_DL;
     $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
-    $('autoInterval').value=c.auto_interval||'5';
+    $('autoInterval').value=c.auto_interval||DFT_INT;
   });
   fetch('/api/prop').then(r=>r.json()).then(p=>{
     $('modVer').textContent=(p.name||'')+' '+(p.version||'');
@@ -390,6 +423,10 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2000)}
 function btnLoading(b,t){b.disabled=true;b.innerHTML='<span class="spinner"></span> '+t}
 function btnReset(b,t){b.disabled=false;b.textContent=t}
+function showTab(t){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('show',p.id==='page-'+t));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===t));
+}
 
 function saveConfig(){
   const b=$('btnSave');btnLoading(b,'保存中...');
@@ -417,7 +454,7 @@ function saveService(){
   const v=$('port').value.trim(),n=parseInt(v);
   if(!n||n<1||n>65535)return toast('请输入 1-65535 的有效端口号');
   const b=$('btnService');btnLoading(b,'保存中...');
-  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value})})
+  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value})})
   .then(r=>r.json()).then(d=>{
     if(!d.ok){toast('保存失败: '+(d.error||''));return}
     if(d.port_changed){
@@ -559,7 +596,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
     def _serve_html(self):
         html = (HTML_PAGE.replace("__SUFFIX__", DEFAULT_SUFFIX)
                 .replace("__PORT__", str(DEFAULT_PORT))
-                .replace("__LOGFILE__", DEFAULT_LOG_FILE))
+                .replace("__LOGFILE__", DEFAULT_LOG_FILE)
+                .replace("__DOWNLOAD__", DEFAULT_DOWNLOAD_DIR)
+                .replace("__INTERVAL__", str(DEFAULT_AUTO_INTERVAL)))
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -611,7 +650,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             if not zip_asset:
                 return self._json({"ok": False, "error": "Release 中未找到 .zip 文件", "output": ""})
 
-            dl_path = os.path.join(DOWNLOAD_DIR, "drcom_update.zip")
+            dl_dir = read_env().get("download_dir", DEFAULT_DOWNLOAD_DIR) or DEFAULT_DOWNLOAD_DIR
+            os.makedirs(dl_dir, exist_ok=True)
+            dl_path = os.path.join(dl_dir, "drcom_update.zip")
             resp = requests.get(zip_asset["url"], timeout=SCRIPT_TIMEOUT, stream=True,
                                 headers={"User-Agent": UA})
             resp.raise_for_status()
@@ -661,8 +702,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except ValueError:
             return self._json({"ok": False, "error": "端口范围 1-65535"})
         log_file = self._param(p, "log_file", DEFAULT_LOG_FILE)
+        download_dir = self._param(p, "download_dir", DEFAULT_DOWNLOAD_DIR)
         port_changed = port != read_port()
-        write_env(port=str(port), log_file=log_file)
+        write_env(port=str(port), log_file=log_file, download_dir=download_dir)
         self._json({"ok": True, "port_changed": port_changed})
         if port_changed:
             threading.Timer(SHUTDOWN_DELAY, _shutdown).start()
