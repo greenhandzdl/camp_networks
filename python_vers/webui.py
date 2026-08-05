@@ -31,6 +31,7 @@ DEFAULT_SUFFIX = "@cmcc"
 DEFAULT_LOG_FILE = "/data/local/tmp/drcom_webui.log"
 DEFAULT_DOWNLOAD_DIR = "/sdcard/Download"   # 更新包下载目录（可在 WebUI 修改）
 DEFAULT_AUTO_INTERVAL = 5     # 自动认证间隔（分钟）
+DEFAULT_AUTO_DELAY = 5        # 接入目标 WiFi 后延迟秒数再触发第一次认证（等待 DHCP 等）
 AUTO_CHECK_INTERVAL = 30      # 自动认证轮询 WiFi 状态周期（秒）
 GITHUB_REPO = "greenhandzdl/camp_networks_magisk"
 CDN_BASE = "https://cdn.jsdelivr.net/gh"   # jsDelivr CDN（国内访问 GitHub 不稳定，优先走 CDN）
@@ -47,13 +48,21 @@ _ENV_DEFAULTS = {
     "debug": "false", "port": str(DEFAULT_PORT),
     "log_file": DEFAULT_LOG_FILE, "download_dir": DEFAULT_DOWNLOAD_DIR,
     "auto_run": "false", "target_essid": "", "auto_interval": str(DEFAULT_AUTO_INTERVAL),
+    "auto_delay": str(DEFAULT_AUTO_DELAY),
 }
 _ENV_KEYS = list(_ENV_DEFAULTS)
 
 # ===================== 全局状态 =====================
 _run_lock = threading.Lock()
 _server = None
-_auto_state = {"last_run": 0.0, "connected": False}
+_current_proc = None          # 当前运行中的认证子进程（Popen）
+_proc_lock = threading.Lock()
+_auto_state = {
+    "connected": False,         # 是否连上目标 WiFi
+    "connect_time": 0.0,        # 接入目标 WiFi 的时刻
+    "next_run": 0.0,            # 下次计划执行的 unix 时间戳（0 表示无计划）
+    "running_by_auto": False,   # 当前运行的任务是否由自动认证触发
+}
 
 
 # ===================== 配置读写 =====================
@@ -146,30 +155,57 @@ def get_ip_addresses():
 
 # ===================== 认证执行 =====================
 def _exec_login():
-    """运行认证脚本，返回 (ok, output)；任务并发时返回 None"""
+    """运行认证脚本，返回 (ok, output)；任务并发时返回 None，可被 _stop_login() 终止"""
     if not _run_lock.acquire(blocking=False):
         return None
+    global _current_proc
     try:
-        r = subprocess.run(
+        proc = subprocess.Popen(
             [sys.executable, SCRIPT_PATH],
-            capture_output=True, text=True, timeout=SCRIPT_TIMEOUT,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env={**os.environ, "DRCOM_CONFIG_DIR": CONFIG_DIR},
         )
-        parts = [r.stdout] if r.stdout else []
-        if r.stderr:
-            parts.append(f"\n[STDERR]\n{r.stderr}")
-        return r.returncode == 0, "".join(parts).strip()
-    except subprocess.TimeoutExpired:
-        return False, f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"
+        with _proc_lock:
+            _current_proc = proc
+        try:
+            stdout, stderr = proc.communicate(timeout=SCRIPT_TIMEOUT)
+            returncode = proc.returncode
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            stdout, stderr = proc.communicate()
+            return False, f"认证脚本执行超时（{SCRIPT_TIMEOUT}s）"
+        parts = [stdout.decode(errors="replace")] if stdout else []
+        if stderr:
+            parts.append(f"\n[STDERR]\n{stderr.decode(errors='replace')}")
+        return returncode == 0, "".join(parts).strip()
     except Exception as e:
         return False, f"执行失败: {e}"
     finally:
+        with _proc_lock:
+            _current_proc = None
         _run_lock.release()
+
+
+def _stop_login():
+    """终止当前运行中的认证任务（手动或自动均生效）"""
+    with _proc_lock:
+        p = _current_proc
+    if p is None:
+        return False
+    try:
+        p.kill()
+        return True
+    except OSError:
+        return False
 
 
 # ===================== 自动认证 =====================
 def _auto_loop():
-    """后台循环：接入目标 ESSID 的 WiFi 时触发认证并按间隔重跑，断开时停止"""
+    """后台循环：接入目标 ESSID 的 WiFi 延迟 auto_delay 秒后触发首次认证，
+    之后按 auto_interval 间隔重跑，断开 WiFi 自动停止"""
     while True:
         time.sleep(AUTO_CHECK_INTERVAL)
         try:
@@ -179,20 +215,41 @@ def _auto_loop():
                        and cfg.get("username") and cfg.get("password"))
             ssid = get_wifi_info().get("ssid", "")
             connected = bool(enabled) and ssid == target
-            if connected:
-                try:
-                    interval = max(1, int(cfg.get("auto_interval", DEFAULT_AUTO_INTERVAL))) * 60
-                except (ValueError, TypeError):
-                    interval = DEFAULT_AUTO_INTERVAL * 60
-                # 刚接入立即触发；之后按间隔重跑
-                if not _auto_state["connected"] or time.time() - _auto_state["last_run"] >= interval:
-                    _auto_state["last_run"] = time.time()
-                    r = _exec_login()
-                    if r is None:
-                        print("[自动] 已有认证任务在运行，跳过本轮")
-                    else:
-                        print(f"[自动] 认证{'成功' if r[0] else '失败'}\n{r[1]}")
-            _auto_state["connected"] = connected
+
+            if not connected:
+                # 未连接目标 WiFi：重置调度
+                _auto_state["connected"] = False
+                _auto_state["next_run"] = 0.0
+                continue
+
+            now = time.time()
+            try:
+                delay = max(0, int(cfg.get("auto_delay", DEFAULT_AUTO_DELAY)))
+            except (ValueError, TypeError):
+                delay = DEFAULT_AUTO_DELAY
+            try:
+                interval = max(1, int(cfg.get("auto_interval", DEFAULT_AUTO_INTERVAL))) * 60
+            except (ValueError, TypeError):
+                interval = DEFAULT_AUTO_INTERVAL * 60
+
+            if not _auto_state["connected"]:
+                # 刚接入目标 WiFi：记录接入时间，安排延迟后第一次执行
+                _auto_state["connected"] = True
+                _auto_state["connect_time"] = now
+                _auto_state["next_run"] = now + delay
+                print(f"[自动] 已接入 {target}，将在 {delay}s 后触发首次认证")
+                continue
+
+            # 已接入目标 WiFi：检查是否到达执行时间
+            if _auto_state["next_run"] <= now:
+                _auto_state["running_by_auto"] = True
+                r = _exec_login()
+                _auto_state["running_by_auto"] = False
+                if r is None:
+                    print("[自动] 已有认证任务在运行，跳过本轮")
+                else:
+                    print(f"[自动] 认证{'成功' if r[0] else '失败'}\n{r[1]}")
+                _auto_state["next_run"] = time.time() + interval
         except Exception as e:
             print(f"[自动] 检查异常: {e}")
 
@@ -326,6 +383,10 @@ border-radius:10px;transition:color .2s}
       <button class="btn btn-outline" style="margin-top:12px" onclick="loadNet(true)">刷新</button>
     </div>
     <div class="card">
+      <div class="card-title"><span class="icon">&#9200;</span> 自动认证状态</div>
+      <div class="update-info" id="autoStatus">加载中...</div>
+    </div>
+    <div class="card">
       <div class="card-title"><span class="icon">&#128230;</span> 模块更新</div>
       <button class="btn btn-outline" id="btnCheck" onclick="checkUpdate()">检查更新</button>
       <div class="update-info hidden" id="updateInfo"></div>
@@ -374,6 +435,8 @@ border-radius:10px;transition:color .2s}
         </div></div>
       <div class="form-group"><label>运行间隔（分钟）</label>
         <input type="number" id="autoInterval" min="1" inputmode="numeric" placeholder="__INTERVAL__"></div>
+      <div class="form-group"><label>接入后首次延迟（秒）<span class="hint" style="display:inline;margin-left:6px">等待 DHCP 获取 IP</span></label>
+        <input type="number" id="autoDelay" min="0" inputmode="numeric" placeholder="__DELAY__"></div>
       <button class="btn btn-primary" id="btnSaveAuto" onclick="saveAuto()">保存自动设置</button>
       <div class="hint">需已配置账号密码。接入目标 WiFi 立即触发认证并按间隔重跑，断开 WiFi 自动停止。</div>
     </div>
@@ -404,7 +467,8 @@ border-radius:10px;transition:color .2s}
 <div class="toast" id="toast"></div>
 
 <script>
-const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__",DFT_DL="__DOWNLOAD__",DFT_INT="__INTERVAL__";
+const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__",DFT_DL="__DOWNLOAD__",DFT_INT="__INTERVAL__",DFT_DELAY="__DELAY__";
+let _runBusy=false;
 document.addEventListener('DOMContentLoaded',()=>{
   fetch('/api/config').then(r=>r.json()).then(c=>{
     $('username').value=c.username||'';$('password').value=c.password||'';
@@ -413,11 +477,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     $('downloadDir').value=c.download_dir||DFT_DL;
     $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
     $('autoInterval').value=c.auto_interval||DFT_INT;
+    $('autoDelay').value=c.auto_delay!==undefined?c.auto_delay:DFT_DELAY;
   });
   fetch('/api/prop').then(r=>r.json()).then(p=>{
     $('modVer').textContent=(p.name||'')+' '+(p.version||'');
   });
   loadNet(false);
+  pollRunStatus();
+  setInterval(pollRunStatus,2000);
 });
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2000)}
@@ -438,16 +505,61 @@ function saveConfig(){
 }
 
 function runAuth(){
+  if(_runBusy){stopRun();return}
   const b=$('btnRun'),t=$('btnRunText'),o=$('authOutput'),s=$('authStatus');
   btnLoading(b,'认证中...');t.innerHTML='<span class="spinner"></span> 认证中...';
   o.className='output-box show';o.textContent='正在执行认证脚本...\n';s.innerHTML='';
   fetch('/api/run').then(r=>r.json()).then(d=>{
+    if(d.error==='busy'){toast('已有任务运行中，请先停止');return}
     o.textContent=d.output||'(无输出)';
     s.innerHTML=d.ok?'<div class="status-bar ok">&#10003; 认证完成</div>'
       :'<div class="status-bar err">&#10007; 执行异常</div>';
   }).catch(e=>{o.textContent='请求失败: '+e;
     s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';
-  }).finally(()=>btnReset(b,'▶ 立即认证'));
+  }).finally(()=>{
+    if(!_runBusy)btnReset(b,'&#9654; 立即认证');
+    pollRunStatus();
+  });
+}
+
+function stopRun(){
+  fetch('/api/stop_run',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.ok)toast('已终止认证任务');else toast(d.error||'停止失败');
+    setTimeout(pollRunStatus,300);
+  }).catch(()=>toast('请求失败'));
+}
+
+function pollRunStatus(){
+  fetch('/api/run_status').then(r=>r.json()).then(d=>{
+    _runBusy=d.running;
+    // 更新认证按钮状态
+    const b=$('btnRun'),t=$('btnRunText');
+    if(d.running){
+      b.disabled=false;
+      b.classList.remove('btn-success');b.classList.add('btn-warn');
+      const srcTxt=d.source==='auto'?'(自动)':'(手动)';
+      t.innerHTML='&#9632; 停止任务 '+srcTxt;
+    }else{
+      btnReset(b,'&#9654; 立即认证');
+      b.classList.remove('btn-warn');b.classList.add('btn-success');
+    }
+    // 更新自动认证状态卡片
+    const el=$('autoStatus');
+    let h='';
+    if(!d.auto_connected){
+      h='<div>&#128683; 未连接目标 WiFi，自动认证待命中</div>';
+    }else if(d.running&&d.source==='auto'){
+      h='<div>&#9889; 正在执行自动认证...</div>';
+    }else if(d.running&&d.source==='manual'){
+      h='<div>&#9881; 手动认证任务运行中</div>';
+    }else if(d.has_schedule){
+      h='<div>&#9200; 距离下次自动执行: <b>'+d.next_run_in+'</b> 秒</div>';
+    }else{
+      h='<div>&#10003; 已连接目标 WiFi，自动认证待命中</div>';
+    }
+    h+='<div style="margin-top:4px;font-size:11px;color:var(--text2)">未连接目标 WiFi 时不会触发自动认证</div>';
+    el.innerHTML=h;
+  }).catch(()=>{});
 }
 
 function saveService(){
@@ -498,7 +610,8 @@ function saveAuto(){
   fetch('/api/save_auto',{method:'POST',body:new URLSearchParams({
     auto_run:$('autoRun').checked?'true':'false',
     target_essid:$('targetEssid').value,
-    auto_interval:$('autoInterval').value})})
+    auto_interval:$('autoInterval').value,
+    auto_delay:$('autoDelay').value})})
   .then(r=>r.json()).then(d=>toast(d.ok?'自动设置已保存':'保存失败: '+(d.error||'')))
   .catch(()=>toast('网络错误')).finally(()=>btnReset(b,'保存自动设置'));
 }
@@ -562,6 +675,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/config":    "_api_config",
         "/api/prop":      "_api_prop",
         "/api/run":       "_api_run",
+        "/api/run_status": "_api_run_status",
         "/api/network":   "_api_network",
         "/api/log":       "_api_log",
         "/api/check_update": "_api_check_update",
@@ -571,6 +685,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/save":         "_api_save",
         "/api/save_auto":    "_api_save_auto",
         "/api/save_service": "_api_save_service",
+        "/api/stop_run":     "_api_stop_run",
     }
 
     def do_GET(self):
@@ -594,7 +709,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 .replace("__PORT__", str(DEFAULT_PORT))
                 .replace("__LOGFILE__", DEFAULT_LOG_FILE)
                 .replace("__DOWNLOAD__", DEFAULT_DOWNLOAD_DIR)
-                .replace("__INTERVAL__", str(DEFAULT_AUTO_INTERVAL)))
+                .replace("__INTERVAL__", str(DEFAULT_AUTO_INTERVAL))
+                .replace("__DELAY__", str(DEFAULT_AUTO_DELAY)))
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -610,8 +726,33 @@ class WebUIHandler(BaseHTTPRequestHandler):
     def _api_run(self):
         r = _exec_login()
         if r is None:
-            return self._json({"ok": False, "output": "已有认证任务正在运行"})
+            return self._json({"ok": False, "error": "busy", "output": "已有认证任务正在运行"})
         self._json({"ok": r[0], "output": r[1]})
+
+    def _api_run_status(self):
+        """返回认证任务状态与自动认证调度状态（供前端轮询）"""
+        with _proc_lock:
+            running = _current_proc is not None
+        now = time.time()
+        next_run = _auto_state.get("next_run", 0.0)
+        next_in = max(0, int(next_run - now)) if next_run > now else 0
+        # 区分任务来源
+        if running:
+            source = "auto" if _auto_state.get("running_by_auto") else "manual"
+        else:
+            source = None
+        self._json({
+            "running": running,
+            "source": source,
+            "auto_connected": _auto_state.get("connected", False),
+            "next_run_in": next_in,          # 0 = 无调度（未连接/未启用）或立即可执行
+            "has_schedule": next_run > now,   # 是否有待执行的计划
+        })
+
+    def _api_stop_run(self):
+        """终止当前运行中的认证任务"""
+        stopped = _stop_login()
+        self._json({"ok": stopped, "error": "" if stopped else "无正在运行的任务"})
 
     def _api_network(self):
         self._json({**get_wifi_info(), **get_ip_addresses()})
@@ -697,9 +838,19 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             return self._json({"ok": False, "error": "间隔需为不小于 1 的整数（分钟）"})
+        try:
+            delay = int(self._param(p, "auto_delay", str(DEFAULT_AUTO_DELAY)))
+            if delay < 0:
+                raise ValueError
+        except ValueError:
+            return self._json({"ok": False, "error": "延迟需为非负整数（秒）"})
         write_env(auto_run=str(auto_run).lower(),
                   target_essid=self._param(p, "target_essid"),
-                  auto_interval=str(interval))
+                  auto_interval=str(interval),
+                  auto_delay=str(delay))
+        # 保存后重置调度：如已接入目标 WiFi 则重新按 delay 安排
+        if _auto_state["connected"]:
+            _auto_state["next_run"] = time.time() + delay
         self._json({"ok": True})
 
     def _api_save_service(self):
