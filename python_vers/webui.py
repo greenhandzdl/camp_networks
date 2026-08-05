@@ -7,6 +7,7 @@ import os
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs
 
 from webui_utils.constants import (
@@ -250,11 +251,16 @@ def _shutdown():
     os._exit(0)
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """多线程 HTTP 服务器，避免并发请求阻塞"""
+    daemon_threads = True
+
+
 def main():
     global _server
     threading.Thread(target=auto_loop, daemon=True).start()
     port = read_port()
-    _server = HTTPServer(("0.0.0.0", port), WebUIHandler)
+    _server = ThreadedHTTPServer(("0.0.0.0", port), WebUIHandler)
     print(f"WebUI 已启动，请访问 http://127.0.0.1:{port}")
     print("按 Ctrl+C 停止")
     _server.serve_forever()
