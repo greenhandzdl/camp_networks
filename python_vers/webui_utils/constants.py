@@ -40,5 +40,6 @@ ENV_DEFAULTS = {
     "log_file": DEFAULT_LOG_FILE, "download_dir": DEFAULT_DOWNLOAD_DIR,
     "auto_run": "false", "target_essid": "", "auto_interval": str(DEFAULT_AUTO_INTERVAL),
     "auto_delay": str(DEFAULT_AUTO_DELAY),
+    "update_channel": "GitHub",
 }
 ENV_KEYS = list(ENV_DEFAULTS)

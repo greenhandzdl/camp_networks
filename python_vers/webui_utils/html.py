@@ -152,7 +152,7 @@ border-radius:10px;transition:color .2s}
         </div></div>
       <div class="form-group"><label>运行间隔（分钟）</label>
         <input type="number" id="autoInterval" min="1" inputmode="numeric" placeholder="__INTERVAL__"></div>
-      <div class="form-group"><label>接入后首次延迟（秒）<span class="hint" style="display:inline;margin-left:6px">等待 DHCP 获取 IP</span></label>
+      <div class="form-group"><label>接入后首次延迟（秒）</label>
         <input type="number" id="autoDelay" min="0" inputmode="numeric" placeholder="__DELAY__"></div>
       <button class="btn btn-primary" id="btnSaveAuto" onclick="saveAuto()">保存自动设置</button>
       <div class="hint">需已配置账号密码。接入目标 WiFi 立即触发认证并按间隔重跑，断开 WiFi 自动停止。</div>
@@ -169,6 +169,16 @@ border-radius:10px;transition:color .2s}
         <input type="text" id="logFile" placeholder="__LOGFILE__"></div>
       <div class="form-group"><label>更新包下载目录</label>
         <input type="text" id="downloadDir" placeholder="__DOWNLOAD__"></div>
+      <div class="form-group"><label>更新渠道</label>
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;margin-bottom:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px">
+          <input type="radio" name="updateCh" value="GitHub" style="accent-color:var(--primary);margin-top:2px">
+          <span><b>GitHub</b><br><span style="color:var(--text2);font-size:11px">实时更新最快，但国内连接可能不稳定</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px">
+          <input type="radio" name="updateCh" value="CDN" style="accent-color:var(--primary);margin-top:2px">
+          <span><b>CDN (jsDelivr)</b><br><span style="color:var(--text2);font-size:11px">国内访问快速稳定，但缓存可能导致更新延迟数小时</span></span>
+        </label>
+      </div>
       <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
       <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
     </div>
@@ -195,6 +205,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
     $('autoInterval').value=c.auto_interval||DFT_INT;
     $('autoDelay').value=c.auto_delay!==undefined?c.auto_delay:DFT_DELAY;
+    const ch=document.querySelector('input[name="updateCh"][value="'+(c.update_channel||'GitHub')+'"]');
+    if(ch)ch.checked=true;
   });
   fetch('/api/prop').then(r=>r.json()).then(p=>{
     $('modVer').textContent=(p.name||'')+' '+(p.version||'');
@@ -234,7 +246,7 @@ function runAuth(){
   }).catch(e=>{o.textContent='请求失败: '+e;
     s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';
   }).finally(()=>{
-    if(!_runBusy)btnReset(b,'&#9654; 立即认证');
+    if(!_runBusy){btnReset(b,'▶ 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');}
     pollRunStatus();
   });
 }
@@ -255,9 +267,9 @@ function pollRunStatus(){
       b.disabled=false;
       b.classList.remove('btn-success');b.classList.add('btn-warn');
       const srcTxt=d.source==='auto'?'(自动)':'(手动)';
-      t.innerHTML='&#9632; 停止任务 '+srcTxt;
+      t.innerHTML='■ 停止任务 '+srcTxt;
     }else{
-      btnReset(b,'&#9654; 立即认证');
+      btnReset(b,'▶ 立即认证');
       b.classList.remove('btn-warn');b.classList.add('btn-success');
     }
     // 更新自动认证状态卡片
@@ -283,7 +295,7 @@ function saveService(){
   const v=$('port').value.trim(),n=parseInt(v);
   if(!n||n<1||n>65535)return toast('请输入 1-65535 的有效端口号');
   const b=$('btnService');btnLoading(b,'保存中...');
-  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value})})
+  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value,update_channel:(document.querySelector('input[name="updateCh"]:checked')||{}).value||'GitHub'})})
   .then(r=>r.json()).then(d=>{
     if(!d.ok){toast('保存失败: '+(d.error||''));return}
     if(d.port_changed){
@@ -337,32 +349,20 @@ function checkUpdate(){
   const b=$('btnCheck'),info=$('updateInfo');
   btnLoading(b,'检查中...');info.className='update-info hidden';
   fetch('/api/check_update').then(r=>r.json()).then(d=>{
-    if(d.error){info.innerHTML='<div class="status-bar warn">&#9888; '+d.error+'</div>';
+    const cur=d.current_version||'unknown',ch=d.channel||'GitHub';
+    if(d.error){
+      info.innerHTML='<div style="margin-bottom:8px;font-size:12px;color:var(--text2)">当前版本: '+cur+' | 渠道: '+ch+'</div>'
+        +'<div class="status-bar warn">&#9888; '+d.error+'</div>';
       info.className='update-info';return}
-    const srcs=d.sources||[],cur=d.current_version||'unknown';
-    let h='<div style="margin-bottom:10px;font-size:13px;color:var(--text2)">当前版本: '+cur+'</div>';
-    let hasNewer=false;
-    srcs.forEach(s=>{
-      if(!s.ok){
-        h+='<div class="status-bar err" style="margin-bottom:6px">&#10007; '+s.name+': 获取失败'
-          +'<br><span style="font-size:11px">'+s.error+'</span></div>';
-        return;
-      }
-      if(s.is_newer)hasNewer=true;
-      const badge=s.is_newer
-        ?'<span class="tag" style="background:var(--success);margin-left:6px">新</span>'
-        :'<span class="tag" style="background:var(--text2);margin-left:6px">旧</span>';
-      const ck=s.name===(d.best&&d.best.name)?'checked':'';
-      h+='<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:4px;'
-        +'background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px">'
-        +'<input type="radio" name="updateSrc" value="'+s.name+'" '+ck+' style="accent-color:var(--primary)">'
-        +'<span style="font-weight:600">'+s.name+'</span>'
-        +'<span class="tag">'+s.tag+'</span>'+badge+'</label>';
-    });
-    if(hasNewer){
-      h+='<button class="btn btn-warn" style="margin-top:10px" onclick="doUpdate()">下载并安装更新</button>';
-      if(d.best&&d.best.html_url)h+='<div class="hint"><a href="'+d.best.html_url+'" target="_blank">查看更新日志</a></div>';
-    }else{h+='<div class="status-bar ok" style="margin-top:6px">&#10003; 所有源均显示已是最新版本</div>'}
+    const i=d.info;
+    let h='<div style="margin-bottom:10px;font-size:13px;color:var(--text2)">当前版本: '+cur+' | 渠道: '+ch+'</div>';
+    if(i.is_newer){
+      h+='<div class="status-bar info" style="margin-bottom:8px">发现新版本: <b>'+i.tag+'</b></div>';
+      h+='<button class="btn btn-warn" onclick="doUpdate()">下载并安装更新</button>';
+      if(i.html_url)h+='<div class="hint"><a href="'+i.html_url+'" target="_blank">查看更新日志</a></div>';
+    }else{
+      h+='<div class="status-bar ok">&#10003; 已是最新版本 ('+i.tag+')</div>';
+    }
     info.innerHTML=h;info.className='update-info';
   }).catch(e=>{info.innerHTML='<div class="status-bar err">检查失败: '+e+'</div>';
     info.className='update-info';
@@ -371,10 +371,8 @@ function checkUpdate(){
 
 function doUpdate(){
   const info=$('updateInfo');
-  const sel=document.querySelector('input[name="updateSrc"]:checked');
-  const src=sel?sel.value:'';
-  info.innerHTML='<div class="status-bar info"><span class="spinner"></span> 正在从 '+src+' 下载更新...</div>';
-  fetch('/api/do_update',{method:'POST',body:new URLSearchParams({source:src})})
+  info.innerHTML='<div class="status-bar info"><span class="spinner"></span> 正在下载更新...</div>';
+  fetch('/api/do_update',{method:'POST'})
   .then(r=>r.json()).then(d=>{
     const cls=d.ok?'ok':'err',icon=d.ok?'&#10003;':'&#10007;';
     const title=d.ok?'更新完成！请在 Magisk Manager 中重新刷入模块。':'更新失败: '+(d.error||'未知错误');

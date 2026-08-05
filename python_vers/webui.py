@@ -17,7 +17,7 @@ from webui_utils.constants import (
 from webui_utils.config import read_env, write_env, read_port, read_module_prop
 from webui_utils.network import get_wifi_info, get_ip_addresses
 from webui_utils.auth import exec_login, stop_login, get_run_status, auto_loop, _auto_state
-from webui_utils.update import check_update_all, download_update
+from webui_utils.update import check_update, download_update
 from webui_utils.html import HTML_PAGE
 
 _server = None
@@ -128,35 +128,29 @@ class WebUIHandler(BaseHTTPRequestHandler):
             cur_code = int(prop.get("versionCode", 0))
         except ValueError:
             cur_code = 0
-        sources, best, err = check_update_all()
+        channel = read_env().get("update_channel", "GitHub")
+        info, err = check_update(channel)
         if err:
-            return self._json({"error": err, "current_version": ver})
-        for s in sources:
-            if s.get("ok"):
-                s["is_newer"] = s["versionCode"] > cur_code
+            return self._json({"error": err, "current_version": ver, "channel": channel})
+        info["is_newer"] = info["versionCode"] > cur_code
         self._json({
-            "sources": sources, "best": best,
+            "info": info,
             "current_version": ver,
-            "has_update": best["versionCode"] > cur_code if best else False,
+            "channel": channel,
+            "has_update": info["is_newer"],
         })
 
     def _api_do_update(self):
         try:
-            p = self._post_params()
-            source_name = self._param(p, "source", "")
-            sources, best, err = check_update_all()
+            channel = read_env().get("update_channel", "GitHub")
+            info, err = check_update(channel)
             if err:
                 return self._json({"ok": False, "error": err, "output": ""})
-            selected = None
-            if source_name:
-                selected = next((s for s in sources if s["name"] == source_name and s.get("ok")), None)
-            if not selected:
-                selected = best
-            if not selected:
-                return self._json({"ok": False, "error": "无可用更新源", "output": ""})
+            if not info:
+                return self._json({"ok": False, "error": "无可用更新", "output": ""})
 
             dl_dir = read_env().get("download_dir", DEFAULT_DOWNLOAD_DIR) or DEFAULT_DOWNLOAD_DIR
-            ok, output, _ = download_update(selected, dl_dir)
+            ok, output, _ = download_update(info, dl_dir)
             self._json({"ok": ok, "error": "" if ok else output, "output": output if ok else ""})
         except Exception as e:
             self._json({"ok": False, "error": str(e), "output": ""})
@@ -207,8 +201,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return self._json({"ok": False, "error": "端口范围 1-65535"})
         log_file = self._param(p, "log_file", DEFAULT_LOG_FILE)
         download_dir = self._param(p, "download_dir", DEFAULT_DOWNLOAD_DIR)
+        update_channel = self._param(p, "update_channel", "GitHub")
+        if update_channel not in ("GitHub", "CDN"):
+            update_channel = "GitHub"
         port_changed = port != read_port()
-        write_env(port=str(port), log_file=log_file, download_dir=download_dir)
+        write_env(port=str(port), log_file=log_file, download_dir=download_dir,
+                  update_channel=update_channel)
         self._json({"ok": True, "port_changed": port_changed})
         if port_changed:
             threading.Timer(SHUTDOWN_DELAY, _shutdown).start()
