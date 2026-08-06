@@ -18,6 +18,18 @@ CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/drcom-wlan-login")
 ENV_PATH = os.path.join(CONFIG_DIR, "config.env")
 PROP_PATH = os.path.join(MOD_DIR, "module.prop")
 SCRIPT_PATH = os.path.join(SCRIPT_DIR, "wlan_login.py")
+LOGOUT_SCRIPT_PATH = os.path.join(SCRIPT_DIR, "wlan_logout.py")
+ACCOUNTS_PATH = os.path.join(CONFIG_DIR, "accounts.json")
+CHANNELS_PATH = os.path.join(CONFIG_DIR, "channels.json")
+
+DEFAULT_CHANNELS = {
+    "@cmcc": "中国移动",
+    "@unicom": "中国联通",
+    "@telecom": "中国电信",
+    "@glgd": "中国广电",
+    "": "校园网",
+}
+BUILTIN_CHANNEL_SUFFIXES = set(DEFAULT_CHANNELS.keys())
 
 # ===================== 行为常量 =====================
 DEFAULT_PORT = 38080

@@ -120,12 +120,21 @@ border-radius:10px;transition:color .2s}
   <div id="page-auth" class="page">
     <div class="card">
       <div class="card-title"><span class="icon">&#128273;</span> 认证配置</div>
+      <div class="form-group"><label>已保存账号</label>
+        <select id="accountSelect" style="width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none">
+          <option value="">-- 选择已保存账号 --</option>
+        </select>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-outline" style="flex:1;padding:10px" onclick="saveAccount()">保存当前账号</button>
+          <button class="btn btn-outline" style="flex:1;padding:10px" onclick="deleteAccount()">删除选中账号</button>
+        </div></div>
       <div class="form-group"><label>账号</label>
         <input type="text" id="username" placeholder="学号/工号" autocomplete="off"></div>
       <div class="form-group"><label>密码</label>
         <input type="password" id="password" placeholder="认证密码"></div>
       <div class="form-group"><label>运营商后缀</label>
-        <input type="text" id="suffix" placeholder="@cmcc"></div>
+        <select id="suffix" style="width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none">
+        </select></div>
       <div class="form-group"><label>认证服务器 IP <span style="font-size:11px;color:var(--text2)">(AUTH_SERVER)</span></label>
         <input type="text" id="authServer" placeholder="__AUTH_SERVER__"></div>
       <div class="form-group"><label>网关重定向地址 <span style="font-size:11px;color:var(--text2)">(REDIRECT_SERVER)</span></label>
@@ -140,6 +149,8 @@ border-radius:10px;transition:color .2s}
       <div id="authStatus"></div>
       <button class="btn btn-success" id="btnRun" onclick="runAuth()">
         <span id="btnRunText">&#9654; 立即认证</span></button>
+      <button class="btn btn-outline" id="btnLogout" onclick="runLogout()" style="margin-top:10px">
+        &#128682; 登出</button>
       <div class="output-box" id="authOutput"></div>
     </div>
   </div>
@@ -187,6 +198,20 @@ border-radius:10px;transition:color .2s}
       <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
       <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
     </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">&#128290;</span> 渠道管理</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px">
+        <thead><tr style="color:var(--text2);text-align:left;border-bottom:1px solid var(--border)">
+          <th style="padding:6px 4px">后缀</th><th style="padding:6px 4px">标签</th><th style="padding:6px 4px">操作</th>
+        </tr></thead>
+        <tbody id="channelTbody"></tbody>
+      </table>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <input type="text" id="chSuffix" placeholder="后缀 (如 @edu)" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
+        <input type="text" id="chLabel" placeholder="显示名" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
+        <button class="btn btn-outline" style="width:auto;padding:10px 14px" onclick="addChannel()">添加</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -200,21 +225,35 @@ border-radius:10px;transition:color .2s}
 
 <script>
 const $=id=>document.getElementById(id),DFT_SUFFIX="__SUFFIX__",DFT_PORT="__PORT__",DFT_LOG="__LOGFILE__",DFT_DL="__DOWNLOAD__",DFT_INT="__INTERVAL__",DFT_DELAY="__DELAY__",DFT_AUTH="__AUTH_SERVER__",DFT_REDIR="__REDIRECT_SERVER__";
-let _runBusy=false;
+let _runBusy=false,_logoutBusy=false,_accountsCache=[];
 document.addEventListener('DOMContentLoaded',()=>{
-  fetch('/api/config').then(r=>r.json()).then(c=>{
-    $('username').value=c.username||'';$('password').value=c.password||'';
-    $('suffix').value=c.suffix||DFT_SUFFIX;$('debug').checked=c.debug==='true';
-    $('authServer').value=c.auth_server||DFT_AUTH;
-    $('redirectServer').value=c.redirect_server||DFT_REDIR;
-    $('port').value=c.port||DFT_PORT;$('logFile').value=c.log_file||DFT_LOG;
-    $('downloadDir').value=c.download_dir||DFT_DL;
-    $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
-    $('autoInterval').value=c.auto_interval||DFT_INT;
-    $('autoDelay').value=c.auto_delay!==undefined?c.auto_delay:DFT_DELAY;
-    const ch=document.querySelector('input[name="updateCh"][value="'+(c.update_channel||'GitHub')+'"]');
-    if(ch)ch.checked=true;
+  // 先加载渠道（后缀下拉框依赖渠道数据）
+  fetch('/api/channels').then(r=>r.json()).then(ch=>{
+    populateSuffixSelect(ch,DFT_SUFFIX);
+    // 再加载配置（后缀 select 已就绪）
+    return fetch('/api/config').then(r=>r.json()).then(c=>{
+      $('username').value=c.username||'';$('password').value=c.password||'';
+      // 后缀已在上面加载，这里设选中值
+      const sf=$('suffix');
+      for(let i=0;i<sf.options.length;i++){
+        if(sf.options[i].value===(c.suffix||DFT_SUFFIX)){sf.selectedIndex=i;break}
+      }
+      $('debug').checked=c.debug==='true';
+      $('authServer').value=c.auth_server||DFT_AUTH;
+      $('redirectServer').value=c.redirect_server||DFT_REDIR;
+      $('port').value=c.port||DFT_PORT;$('logFile').value=c.log_file||DFT_LOG;
+      $('downloadDir').value=c.download_dir||DFT_DL;
+      $('autoRun').checked=c.auto_run==='true';$('targetEssid').value=c.target_essid||'';
+      $('autoInterval').value=c.auto_interval||DFT_INT;
+      $('autoDelay').value=c.auto_delay!==undefined?c.auto_delay:DFT_DELAY;
+      const ch=document.querySelector('input[name="updateCh"][value="'+(c.update_channel||'GitHub')+'"]');
+      if(ch)ch.checked=true;
+    });
   });
+  // 加载账号
+  loadAccounts();
+  // 渠道管理表格
+  loadChannelTable();
   fetch('/api/prop').then(r=>r.json()).then(p=>{
     $('modVer').textContent=(p.name||'')+' '+(p.version||'');
   });
@@ -415,6 +454,128 @@ function doUpdate(){
     info.innerHTML='<div class="status-bar '+cls+'">'+icon+' '+title+'</div>'
       +'<div style="font-size:12px;color:var(--text2);margin-top:8px;white-space:pre-wrap">'+(d.output||'')+'</div>';
   }).catch(e=>{info.innerHTML='<div class="status-bar err">更新请求失败: '+e+'</div>'});
+}
+
+// ========== 账号管理 ==========
+function loadAccounts(){
+  fetch('/api/accounts').then(r=>r.json()).then(list=>{
+    _accountsCache=list;
+    const sel=$('accountSelect');
+    sel.innerHTML='<option value="">-- 选择已保存账号 --</option>';
+    list.forEach((a,i)=>{
+      const o=document.createElement('option');
+      o.value=i;o.textContent=a.username;sel.appendChild(o);
+    });
+  }).catch(()=>{});
+}
+
+function saveAccount(){
+  const u=$('username').value.trim(),p=$('password').value;
+  if(!u)return toast('请输入账号');
+  fetch('/api/save_account',{method:'POST',body:new URLSearchParams({username:u,password:p})})
+    .then(r=>r.json()).then(d=>{toast(d.ok?'账号已保存':'保存失败: '+d.error);if(d.ok)loadAccounts()})
+    .catch(()=>toast('网络错误'));
+}
+
+function deleteAccount(){
+  const sel=$('accountSelect');
+  if(sel.value==='')return toast('请选择要删除的账号');
+  fetch('/api/delete_account',{method:'POST',body:new URLSearchParams({index:sel.value})})
+    .then(r=>r.json()).then(d=>{toast(d.ok?'已删除':'删除失败: '+d.error);if(d.ok)loadAccounts()})
+    .catch(()=>toast('网络错误'));
+}
+
+// 账号选择自动填充
+$('accountSelect').addEventListener('change',function(){
+  const i=parseInt(this.value);
+  if(isNaN(i)||i<0||i>=_accountsCache.length)return;
+  fetch('/api/account_detail?index='+i).then(r=>r.json()).then(a=>{
+    if(a.ok){$('username').value=a.username;$('password').value=a.password}
+  }).catch(()=>{});
+});
+
+// ========== 渠道管理 ==========
+function populateSuffixSelect(ch,defSuffix){
+  const sf=$('suffix');
+  sf.innerHTML='';
+  Object.keys(ch).forEach(k=>{
+    const o=document.createElement('option');
+    o.value=k;o.textContent=ch[k]+' ('+k+')';
+    if(k===defSuffix)o.selected=true;
+    sf.appendChild(o);
+  });
+}
+
+function loadChannelTable(){
+  fetch('/api/channels').then(r=>r.json()).then(ch=>{
+    populateSuffixSelect(ch,$('suffix').value||DFT_SUFFIX);
+    const tb=$('channelTbody');
+    let h='';
+    Object.keys(ch).forEach(k=>{
+      const isBuiltin=['@cmcc','@unicom','@telecom','@glgd',''].includes(k);
+      h+='<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 4px">'
+        +k+'</td><td style="padding:6px 4px"><input type="text" id="chlbl_'+k.replace(/[@.]/g,'_')+'" value="'+ch[k]+'" style="width:100%;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none"></td>'
+        +'<td style="padding:6px 4px;white-space:nowrap">'
+        +'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="modifyChannel(\''+k+'\')">保存</button> '
+        +(isBuiltin?'<span style="font-size:11px;color:var(--text2)">内置</span>'
+          :'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="deleteChannel(\''+k+'\')">删除</button>')
+        +'</td></tr>';
+    });
+    tb.innerHTML=h;
+  }).catch(()=>{});
+}
+
+function addChannel(){
+  const suffix=$('chSuffix').value.trim(),label=$('chLabel').value.trim();
+  if(!suffix)return toast('请输入后缀');
+  if(!label)return toast('请输入显示名');
+  fetch('/api/save_channel',{method:'POST',body:new URLSearchParams({suffix:suffix,label:label})})
+    .then(r=>r.json()).then(d=>{
+      toast(d.ok?'渠道已添加':'添加失败: '+d.error);
+      if(d.ok){$('chSuffix').value='';$('chLabel').value='';loadChannelTable();}
+    }).catch(()=>toast('网络错误'));
+}
+
+function deleteChannel(suffix){
+  fetch('/api/delete_channel',{method:'POST',body:new URLSearchParams({suffix:suffix})})
+    .then(r=>r.json()).then(d=>{
+      toast(d.ok?'已删除':'删除失败: '+d.error);
+      if(d.ok)loadChannelTable();
+    }).catch(()=>toast('网络错误'));
+}
+
+function modifyChannel(suffix){
+  const id='chlbl_'+suffix.replace(/[@.]/g,'_');
+  const label=$(id).value.trim();
+  if(!label)return toast('标签不能为空');
+  fetch('/api/modify_channel',{method:'POST',body:new URLSearchParams({suffix:suffix,label:label})})
+    .then(r=>r.json()).then(d=>{
+      toast(d.ok?'已修改':'修改失败: '+d.error);
+      if(d.ok)loadChannelTable();
+    }).catch(()=>toast('网络错误'));
+}
+
+// ========== 登出 ==========
+function runLogout(){
+  if(_logoutBusy)return;
+  _logoutBusy=true;
+  const b=$('btnLogout'),o=$('authOutput'),s=$('authStatus');
+  btnLoading(b,'登出中...');
+  o.className='output-box show';o.textContent='正在执行登出...\n';s.innerHTML='';
+  fetch('/api/logout').then(r=>r.json()).then(d=>{
+    if(d.error==='busy'){toast('已有登出任务运行中');_logoutBusy=false;btnReset(b,'&#128682; 登出');return}
+    const tid=d.task_id;
+    const iv=setInterval(()=>{
+      fetch('/api/logout_result?id='+tid).then(r=>r.json()).then(r=>{
+        if(!r.done)return;
+        clearInterval(iv);_logoutBusy=false;
+        o.textContent=r.output||'(无输出)';
+        s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 登出完成</div>'
+          :'<div class="status-bar err">&#10007; 登出异常</div>';
+        btnReset(b,'&#128682; 登出');
+      }).catch(()=>{clearInterval(iv);_logoutBusy=false;btnReset(b,'&#128682; 登出')});
+    },500);
+  }).catch(e=>{o.textContent='请求失败: '+e;_logoutBusy=false;btnReset(b,'&#128682; 登出')});
 }
 </script>
 </body>

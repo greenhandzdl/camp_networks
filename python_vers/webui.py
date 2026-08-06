@@ -17,8 +17,11 @@ from webui_utils.constants import (
     LOG_TAIL_LINES, SHUTDOWN_DELAY,
 )
 from webui_utils.config import read_env, write_env, read_port, read_module_prop
+from webui_utils.config import read_accounts, add_account, delete_account
+from webui_utils.config import read_channels, add_channel, delete_channel, modify_channel
 from webui_utils.network import get_wifi_info, get_ip_addresses
 from webui_utils.auth import start_login, get_task_result, stop_login, get_run_status, auto_loop, _auto_state
+from webui_utils.auth import start_logout, get_logout_result
 from webui_utils.update import check_update, download_update
 from webui_utils.html import HTML_PAGE
 
@@ -55,6 +58,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/network":   "_api_network",
         "/api/log":       "_api_log",
         "/api/check_update": "_api_check_update",
+        "/api/logout":    "_api_logout",
+        "/api/logout_result": "_api_logout_result",
+        "/api/accounts":  "_api_accounts",
+        "/api/account_detail": "_api_account_detail",
+        "/api/channels":  "_api_channels",
     }
     _POST_ROUTES = {
         "/api/save":         "_api_save",
@@ -63,6 +71,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
         "/api/stop_run":     "_api_stop_run",
         "/api/clear_log":    "_api_clear_log",
         "/api/do_update":    "_api_do_update",
+        "/api/save_account":  "_api_save_account",
+        "/api/delete_account": "_api_delete_account",
+        "/api/save_channel":  "_api_save_channel",
+        "/api/delete_channel": "_api_delete_channel",
+        "/api/modify_channel": "_api_modify_channel",
     }
 
     def do_GET(self):
@@ -169,6 +182,50 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "has_update": info["is_newer"],
         })
 
+    def _api_logout(self):
+        """启动登出任务（非阻塞）"""
+        tid = start_logout()
+        if tid is None:
+            return self._json({"ok": False, "error": "busy", "task_id": 0})
+        self._json({"ok": True, "task_id": tid})
+
+    def _api_logout_result(self):
+        """轮询登出任务结果：?id=N"""
+        from urllib.parse import urlparse, parse_qs as _pq
+        qs = _pq(urlparse(self.path).query)
+        try:
+            tid = int(qs.get("id", [0])[0])
+        except (ValueError, IndexError):
+            return self._json({"done": False})
+        r = get_logout_result(tid)
+        if r is None:
+            return self._json({"done": False})
+        self._json({"done": True, "ok": r["ok"], "output": r["output"]})
+
+    def _api_accounts(self):
+        accounts = read_accounts()
+        result = []
+        for a in accounts:
+            result.append({"username": a.get("username", ""), "password": "****"})
+        self._json(result)
+
+    def _api_account_detail(self):
+        """获取单个账号完整信息（含原始密码）"""
+        from urllib.parse import urlparse, parse_qs as _pq
+        qs = _pq(urlparse(self.path).query)
+        try:
+            index = int(qs.get("index", [0])[0])
+        except (ValueError, IndexError):
+            return self._json({"ok": False, "error": "索引无效"})
+        accounts = read_accounts()
+        if not (0 <= index < len(accounts)):
+            return self._json({"ok": False, "error": "索引无效"})
+        a = accounts[index]
+        self._json({"ok": True, "username": a.get("username", ""), "password": a.get("password", "")})
+
+    def _api_channels(self):
+        self._json(read_channels())
+
     def _api_do_update(self):
         try:
             channel = read_env().get("update_channel", "GitHub")
@@ -183,6 +240,44 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._json({"ok": ok, "error": "" if ok else output, "output": output if ok else ""})
         except Exception as e:
             self._json({"ok": False, "error": str(e), "output": ""})
+
+    # ---------- 账号管理 ----------
+    def _api_save_account(self):
+        p = self._post_params()
+        username = self._param(p, "username")
+        password = self._param(p, "password")
+        ok, msg = add_account(username, password)
+        self._json({"ok": ok, "error": "" if ok else msg})
+
+    def _api_delete_account(self):
+        p = self._post_params()
+        try:
+            index = int(self._param(p, "index"))
+        except ValueError:
+            return self._json({"ok": False, "error": "索引无效"})
+        ok, msg = delete_account(index)
+        self._json({"ok": ok, "error": "" if ok else msg})
+
+    # ---------- 渠道管理 ----------
+    def _api_save_channel(self):
+        p = self._post_params()
+        suffix = self._param(p, "suffix")
+        label = self._param(p, "label")
+        ok, msg = add_channel(suffix, label)
+        self._json({"ok": ok, "error": "" if ok else msg})
+
+    def _api_delete_channel(self):
+        p = self._post_params()
+        suffix = self._param(p, "suffix")
+        ok, msg = delete_channel(suffix)
+        self._json({"ok": ok, "error": "" if ok else msg})
+
+    def _api_modify_channel(self):
+        p = self._post_params()
+        suffix = self._param(p, "suffix")
+        label = self._param(p, "label")
+        ok, msg = modify_channel(suffix, label)
+        self._json({"ok": ok, "error": "" if ok else msg})
 
     # ---------- POST 处理 ----------
     def _api_save(self):

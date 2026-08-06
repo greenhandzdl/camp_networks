@@ -21,6 +21,14 @@ _proc_lock = threading.Lock()
 _task_id = 0
 _task_result = None           # {"ok": bool, "output": str} or None
 _task_lock = threading.Lock()
+
+# 登出独立状态
+_run_logout_lock = threading.Lock()
+_current_logout_proc = None
+_logout_proc_lock = threading.Lock()
+_logout_task_id = 0
+_logout_task_result = None
+_logout_task_lock = threading.Lock()
 _auto_state = {
     "connected": False,
     "connect_time": 0.0,
@@ -124,6 +132,70 @@ def stop_login():
         return True
     except OSError:
         return False
+
+
+# ===================== 登出任务 =====================
+
+def _run_logout_thread():
+    """后台线程：运行登出脚本，结果存入 _logout_task_result"""
+    global _current_logout_proc
+    output = ""
+    ok = False
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, _C.LOGOUT_SCRIPT_PATH],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            env={**os.environ, "DRCOM_CONFIG_DIR": _C.CONFIG_DIR},
+        )
+        with _logout_proc_lock:
+            _current_logout_proc = proc
+        try:
+            raw, _ = proc.communicate(timeout=_C.SCRIPT_TIMEOUT)
+            returncode = proc.returncode
+            output = raw.decode(errors="replace").strip() if raw else ""
+            ok = returncode == 0
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            raw, _ = proc.communicate()
+            captured = raw.decode(errors="replace").strip() if raw else ""
+            output = f"登出脚本执行超时（{_C.SCRIPT_TIMEOUT}s）"
+            if captured:
+                output += f"\n--- 超时前输出 ---\n{captured}"
+            ok = False
+    except Exception as e:
+        output = f"执行失败: {e}"
+        ok = False
+    finally:
+        with _logout_task_lock:
+            global _logout_task_result
+            _logout_task_result = {"ok": ok, "output": output}
+        with _logout_proc_lock:
+            _current_logout_proc = None
+        _run_logout_lock.release()
+
+
+def start_logout():
+    """启动登出任务（非阻塞），返回 task_id 或 None（已有任务运行）"""
+    global _logout_task_id
+    if not _run_logout_lock.acquire(blocking=False):
+        return None
+    with _logout_task_lock:
+        _logout_task_id += 1
+        _logout_task_result = None
+    tid = _logout_task_id
+    threading.Thread(target=_run_logout_thread, daemon=True).start()
+    return tid
+
+
+def get_logout_result(task_id):
+    """获取登出任务结果，返回 {"ok", "output"} 或 None（未完成/任务不存在）"""
+    if task_id != _logout_task_id:
+        return None
+    with _logout_task_lock:
+        return _logout_task_result
 
 
 def get_run_status():

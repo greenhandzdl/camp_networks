@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import json
 import os
 import sys
 import time
@@ -197,6 +198,21 @@ def main():
 
     host, wlan_user_ip, wlan_ac_name, wlan_ac_ip, wlan_user_mac = params
     print("✅ 获取参数成功，执行登录...")
+
+    # 保存登录状态供登出使用
+    state_path = os.path.join(CONFIG_DIR, "login_state.json")
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(state_path, "w") as f:
+            json.dump({
+                "host": host,
+                "username": USERNAME,
+                "wlan_user_mac": wlan_user_mac,
+                "wlan_user_ip": wlan_user_ip,
+            }, f)
+        log_debug(f"登录状态已保存到 {state_path}")
+    except Exception as e:
+        log_debug(f"保存登录状态失败: {e}")
 
     success, response = perform_login(host, wlan_user_ip, wlan_ac_name, wlan_ac_ip, wlan_user_mac)
     if not success:
