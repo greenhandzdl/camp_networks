@@ -198,18 +198,18 @@ border-radius:10px;transition:color .2s}
         </select>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn btn-outline" style="flex:1;padding:10px" onclick="saveAccount()">保存当前</button>
-        <button class="btn btn-outline" style="flex:1;padding:10px" onclick="deleteAccount()">删除选中</button>
-        <button class="btn btn-outline" style="flex:1;padding:10px" onclick="restoreFromConfig()">还原</button>
+        <button class="btn btn-outline" style="flex:1;padding:8px 14px;font-size:13px;white-space:nowrap;margin-top:0" onclick="saveAccount()">保存当前</button>
+        <button class="btn btn-outline" style="flex:1;padding:8px 14px;font-size:13px;white-space:nowrap;margin-top:0" onclick="deleteAccount()">删除选中</button>
+        <button class="btn btn-outline" style="flex:1;padding:8px 14px;font-size:13px;white-space:nowrap;margin-top:0" onclick="restoreFromConfig()">还原</button>
       </div>
     </div>
     <div class="card">
       <div class="card-title"><span class="icon">&#128290;</span> 渠道管理</div>
       <div id="channelTbody" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
-      <div style="display:flex;gap:6px;margin-top:10px">
-        <input type="text" id="chSuffix" placeholder="后缀 (如 @edu)" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
-        <input type="text" id="chLabel" placeholder="显示名" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
-        <button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:13px" onclick="addChannel()">添加</button>
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <input type="text" id="chSuffix" placeholder="后缀 (如 @edu)" style="flex:1;min-width:80px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
+        <input type="text" id="chLabel" placeholder="显示名" style="flex:1;min-width:80px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
+        <button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:13px;margin-top:0;white-space:nowrap" onclick="addChannel()">添加</button>
       </div>
     </div>
   </div>

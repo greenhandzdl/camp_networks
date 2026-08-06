@@ -210,6 +210,7 @@ def main():
             json.dump({
                 "host": host,
                 "username": USERNAME,
+                "user_account": f",0,{USERNAME}{ACCOUNT_SUFFIX}",
                 "wlan_user_mac": wlan_user_mac,
                 "wlan_user_ip": wlan_user_ip,
             }, f)

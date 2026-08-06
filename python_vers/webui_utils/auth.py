@@ -249,8 +249,8 @@ def auto_loop():
         try:
             cfg = read_env()
             target = cfg.get("target_essid", "").strip()
-            enabled = (cfg.get("auto_run") == "true" and target
-                       and cfg.get("username") and cfg.get("password"))
+            enabled = bool(cfg.get("auto_run") == "true" and target
+                           and cfg.get("username") and cfg.get("password"))
             ssid = get_wifi_info().get("ssid", "")
             connected = bool(enabled) and ssid == target
 
