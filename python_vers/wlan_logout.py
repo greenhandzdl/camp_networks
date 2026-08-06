@@ -7,6 +7,7 @@ import random
 import sys
 
 import requests
+from dotenv import load_dotenv
 
 # ---------- 配置文件路径 ----------
 CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/modules/drcom-wlan-login")
@@ -20,6 +21,9 @@ EXIT_LOGOUT_FAILED = 3
 
 
 def main():
+    load_dotenv(os.path.join(CONFIG_DIR, "config.env"))
+    DEBUG = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+
     if not os.path.exists(STATE_PATH):
         print("❌ 未找到登录状态文件 login_state.json，可能尚未登录。")
         return EXIT_NO_STATE
@@ -51,6 +55,9 @@ def main():
         f"&v={v}"
         f"&lang=en"
     )
+
+    if DEBUG:
+        print(f"[DEBUG] 登出 URL: {url}")
 
     print(f"正在登出... (host={host}, user={username})")
     try:

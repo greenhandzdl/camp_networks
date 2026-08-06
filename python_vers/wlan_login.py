@@ -27,7 +27,7 @@ load_dotenv(ENV_PATH)
 
 USERNAME = os.getenv("USERNAME", "")
 PASSWORD = os.getenv("PASSWORD", "")
-ACCOUNT_SUFFIX = os.getenv("ACCOUNT_SUFFIX", "@cmcc")
+ACCOUNT_SUFFIX = os.getenv("SUFFIX", "@cmcc")
 DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 IPV6_ADDRESS = os.getenv("IPV6_ADDRESS", "")
 AUTH_SERVER = os.getenv("AUTH_SERVER", "10.0.1.5")

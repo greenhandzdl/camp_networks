@@ -172,6 +172,8 @@ def _run_logout_thread():
         with _logout_task_lock:
             global _logout_task_result
             _logout_task_result = {"ok": ok, "output": output}
+        # 无论成功/失败/超时/异常，都写入日志
+        _write_log(output)
         with _logout_proc_lock:
             _current_logout_proc = None
         _run_logout_lock.release()

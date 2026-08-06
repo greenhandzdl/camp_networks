@@ -120,14 +120,6 @@ border-radius:10px;transition:color .2s}
   <div id="page-auth" class="page">
     <div class="card">
       <div class="card-title"><span class="icon">&#128273;</span> 认证配置</div>
-      <div class="form-group"><label>已保存账号</label>
-        <select id="accountSelect" style="width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none">
-          <option value="">-- 选择已保存账号 --</option>
-        </select>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn btn-outline" style="flex:1;padding:10px" onclick="saveAccount()">保存当前账号</button>
-          <button class="btn btn-outline" style="flex:1;padding:10px" onclick="deleteAccount()">删除选中账号</button>
-        </div></div>
       <div class="form-group"><label>账号</label>
         <input type="text" id="username" placeholder="学号/工号" autocomplete="off"></div>
       <div class="form-group"><label>密码</label>
@@ -135,12 +127,6 @@ border-radius:10px;transition:color .2s}
       <div class="form-group"><label>运营商后缀</label>
         <select id="suffix" style="width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none">
         </select></div>
-      <div class="form-group"><label>认证服务器 IP <span style="font-size:11px;color:var(--text2)">(AUTH_SERVER)</span></label>
-        <input type="text" id="authServer" placeholder="__AUTH_SERVER__"></div>
-      <div class="form-group"><label>网关重定向地址 <span style="font-size:11px;color:var(--text2)">(REDIRECT_SERVER)</span></label>
-        <input type="text" id="redirectServer" placeholder="__REDIRECT_SERVER__"></div>
-      <div class="toggle-row"><span>调试模式</span>
-        <label class="toggle"><input type="checkbox" id="debug"><span class="slider"></span></label></div>
       <div style="margin-top:16px">
         <button class="btn btn-primary" id="btnSave" onclick="saveConfig()">保存配置</button></div>
     </div>
@@ -195,17 +181,31 @@ border-radius:10px;transition:color .2s}
           <span><b>CDN (jsDelivr)</b><br><span style="color:var(--text2);font-size:11px">国内访问快速稳定，但缓存可能导致更新延迟数小时</span></span>
         </label>
       </div>
+      <div class="form-group"><label>认证服务器 IP <span style="font-size:11px;color:var(--text2)">(AUTH_SERVER)</span></label>
+        <input type="text" id="authServer" placeholder="__AUTH_SERVER__"></div>
+      <div class="form-group"><label>网关重定向地址 <span style="font-size:11px;color:var(--text2)">(REDIRECT_SERVER)</span></label>
+        <input type="text" id="redirectServer" placeholder="__REDIRECT_SERVER__"></div>
+      <div class="toggle-row"><span>调试模式</span>
+        <label class="toggle"><input type="checkbox" id="debug"><span class="slider"></span></label></div>
       <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
       <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
     </div>
     <div class="card">
+      <div class="card-title"><span class="icon">&#128100;</span> 多账户设置</div>
+      <div class="form-group"><label>已保存账号</label>
+        <select id="accountSelect" style="width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none">
+          <option value="">-- 选择已保存账号 --</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-outline" style="flex:1;padding:10px" onclick="saveAccount()">保存当前</button>
+        <button class="btn btn-outline" style="flex:1;padding:10px" onclick="deleteAccount()">删除选中</button>
+        <button class="btn btn-outline" style="flex:1;padding:10px" onclick="restoreFromConfig()">还原</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title"><span class="icon">&#128290;</span> 渠道管理</div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px">
-        <thead><tr style="color:var(--text2);text-align:left;border-bottom:1px solid var(--border)">
-          <th style="padding:6px 4px">后缀</th><th style="padding:6px 4px">标签</th><th style="padding:6px 4px">操作</th>
-        </tr></thead>
-        <tbody id="channelTbody"></tbody>
-      </table>
+      <div id="channelTbody" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
       <div style="display:flex;gap:6px;margin-top:10px">
         <input type="text" id="chSuffix" placeholder="后缀 (如 @edu)" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
         <input type="text" id="chLabel" placeholder="显示名" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       // 后缀已在上面加载，这里设选中值
       const sf=$('suffix');
       for(let i=0;i<sf.options.length;i++){
-        if(sf.options[i].value===(c.suffix||DFT_SUFFIX)){sf.selectedIndex=i;break}
+        if(sf.options[i].value===(c.suffix??DFT_SUFFIX)){sf.selectedIndex=i;break}
       }
       $('debug').checked=c.debug==='true';
       $('authServer').value=c.auth_server||DFT_AUTH;
@@ -274,8 +274,7 @@ function saveConfig(){
   const b=$('btnSave');btnLoading(b,'保存中...');
   fetch('/api/save',{method:'POST',body:new URLSearchParams({
     username:$('username').value,password:$('password').value,
-    suffix:$('suffix').value,debug:$('debug').checked?'true':'false',
-    auth_server:$('authServer').value,redirect_server:$('redirectServer').value})})
+    suffix:$('suffix').value})})
   .then(r=>r.json()).then(d=>toast(d.ok?'配置已保存':'保存失败: '+d.error))
   .catch(()=>toast('网络错误')).finally(()=>btnReset(b,'保存配置'));
 }
@@ -363,7 +362,7 @@ function saveService(){
   const v=$('port').value.trim(),n=parseInt(v);
   if(!n||n<1||n>65535)return toast('请输入 1-65535 的有效端口号');
   const b=$('btnService');btnLoading(b,'保存中...');
-  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value,update_channel:(document.querySelector('input[name="updateCh"]:checked')||{}).value||'GitHub'})})
+  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value,update_channel:(document.querySelector('input[name="updateCh"]:checked')||{}).value||'GitHub',auth_server:$('authServer').value,redirect_server:$('redirectServer').value,debug:$('debug').checked?'true':'false'})})
   .then(r=>r.json()).then(d=>{
     if(!d.ok){toast('保存失败: '+(d.error||''));return}
     if(d.port_changed){
@@ -472,6 +471,8 @@ function loadAccounts(){
 function saveAccount(){
   const u=$('username').value.trim(),p=$('password').value;
   if(!u)return toast('请输入账号');
+  const exists=_accountsCache.some(a=>a.username===u);
+  if(exists&&!confirm('账号 '+u+' 已存在，是否覆盖？'))return;
   fetch('/api/save_account',{method:'POST',body:new URLSearchParams({username:u,password:p})})
     .then(r=>r.json()).then(d=>{toast(d.ok?'账号已保存':'保存失败: '+d.error);if(d.ok)loadAccounts()})
     .catch(()=>toast('网络错误'));
@@ -483,6 +484,14 @@ function deleteAccount(){
   fetch('/api/delete_account',{method:'POST',body:new URLSearchParams({index:sel.value})})
     .then(r=>r.json()).then(d=>{toast(d.ok?'已删除':'删除失败: '+d.error);if(d.ok)loadAccounts()})
     .catch(()=>toast('网络错误'));
+}
+
+function restoreFromConfig(){
+  fetch('/api/config').then(r=>r.json()).then(c=>{
+    $('username').value=c.username||'';
+    $('password').value=c.password||'';
+    toast('已从配置文件还原');
+  }).catch(()=>toast('网络错误'));
 }
 
 // 账号选择自动填充
@@ -500,7 +509,7 @@ function populateSuffixSelect(ch,defSuffix){
   sf.innerHTML='';
   Object.keys(ch).forEach(k=>{
     const o=document.createElement('option');
-    o.value=k;o.textContent=ch[k]+' ('+k+')';
+    o.value=k;o.textContent=k===''?ch[k]:ch[k]+' ('+k+')';
     if(k===defSuffix)o.selected=true;
     sf.appendChild(o);
   });
@@ -508,18 +517,20 @@ function populateSuffixSelect(ch,defSuffix){
 
 function loadChannelTable(){
   fetch('/api/channels').then(r=>r.json()).then(ch=>{
-    populateSuffixSelect(ch,$('suffix').value||DFT_SUFFIX);
+    populateSuffixSelect(ch,$('suffix').value??DFT_SUFFIX);
     const tb=$('channelTbody');
     let h='';
     Object.keys(ch).forEach(k=>{
       const isBuiltin=['@cmcc','@unicom','@telecom','@glgd',''].includes(k);
-      h+='<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 4px">'
-        +k+'</td><td style="padding:6px 4px"><input type="text" id="chlbl_'+k.replace(/[@.]/g,'_')+'" value="'+ch[k]+'" style="width:100%;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none"></td>'
-        +'<td style="padding:6px 4px;white-space:nowrap">'
-        +'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="modifyChannel(\''+k+'\')">保存</button> '
-        +(isBuiltin?'<span style="font-size:11px;color:var(--text2)">内置</span>'
-          :'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="deleteChannel(\''+k+'\')">删除</button>')
-        +'</td></tr>';
+      const inputId='chlbl_'+k.replace(/[@.]/g,'_');
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border-radius:10px;border:1px solid var(--border);flex-wrap:wrap">'
+        +'<span style="font-size:12px;color:var(--text2);background:var(--bg2,var(--border));padding:2px 8px;border-radius:6px;font-family:monospace;white-space:nowrap">'+(k||'（校园网）')+'</span>'
+        +(isBuiltin
+          ?'<span style="flex:1;font-size:13px;color:var(--text);min-width:60px">'+ch[k]+'</span><span style="font-size:11px;color:var(--text2);padding:2px 8px;border:1px solid var(--border);border-radius:6px;white-space:nowrap">内置</span>'
+          :'<input type="text" id="'+inputId+'" value="'+ch[k]+'" style="flex:1;min-width:100px;padding:6px 8px;background:var(--bg2,var(--bg));border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none">'
+           +'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick="modifyChannel(\''+k+'\')">保存</button>'
+           +'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick="deleteChannel(\''+k+'\')">删除</button>')
+        +'</div>';
     });
     tb.innerHTML=h;
   }).catch(()=>{});

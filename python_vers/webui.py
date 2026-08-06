@@ -282,14 +282,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
     # ---------- POST 处理 ----------
     def _api_save(self):
         p = self._post_params()
-        debug = self._param(p, "debug", "false").lower() in ("true", "1")
         write_env(
             username=self._param(p, "username"),
             password=self._param(p, "password"),
             suffix=self._param(p, "suffix", DEFAULT_SUFFIX),
-            debug=str(debug).lower(),
-            auth_server=self._param(p, "auth_server", DEFAULT_AUTH_SERVER),
-            redirect_server=self._param(p, "redirect_server", DEFAULT_REDIRECT_SERVER),
         )
         self._json({"ok": True})
 
@@ -330,9 +326,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
         update_channel = self._param(p, "update_channel", "GitHub")
         if update_channel not in ("GitHub", "CDN"):
             update_channel = "GitHub"
+        auth_server = self._param(p, "auth_server", DEFAULT_AUTH_SERVER)
+        redirect_server = self._param(p, "redirect_server", DEFAULT_REDIRECT_SERVER)
+        debug = self._param(p, "debug", "false").lower() in ("true", "1")
         port_changed = port != read_port()
         write_env(port=str(port), log_file=log_file, download_dir=download_dir,
-                  update_channel=update_channel)
+                  update_channel=update_channel,
+                  auth_server=auth_server,
+                  redirect_server=redirect_server,
+                  debug=str(debug).lower())
         self._json({"ok": True, "port_changed": port_changed})
         if port_changed:
             threading.Timer(SHUTDOWN_DELAY, _shutdown).start()
