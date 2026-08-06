@@ -187,6 +187,8 @@ border-radius:10px;transition:color .2s}
         <input type="text" id="redirectServer" placeholder="__REDIRECT_SERVER__"></div>
       <div class="toggle-row"><span>调试模式</span>
         <label class="toggle"><input type="checkbox" id="debug"><span class="slider"></span></label></div>
+      <div class="toggle-row"><span>开机自动打开面板</span>
+        <label class="toggle"><input type="checkbox" id="autoOpenWebui"><span class="slider"></span></label></div>
       <button class="btn btn-warn" id="btnService" onclick="saveService()">保存服务设置</button>
       <div class="hint">修改端口后服务会关闭，通过 Magisk Manager 重启即可；日志路径下次启动生效</div>
     </div>
@@ -239,6 +241,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         if(sf.options[i].value===(c.suffix??DFT_SUFFIX)){sf.selectedIndex=i;break}
       }
       $('debug').checked=c.debug==='true';
+      $('autoOpenWebui').checked=c.auto_open_webui==='true';
       $('authServer').value=c.auth_server||DFT_AUTH;
       $('redirectServer').value=c.redirect_server||DFT_REDIR;
       $('port').value=c.port||DFT_PORT;$('logFile').value=c.log_file||DFT_LOG;
@@ -362,7 +365,7 @@ function saveService(){
   const v=$('port').value.trim(),n=parseInt(v);
   if(!n||n<1||n>65535)return toast('请输入 1-65535 的有效端口号');
   const b=$('btnService');btnLoading(b,'保存中...');
-  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value,update_channel:(document.querySelector('input[name="updateCh"]:checked')||{}).value||'GitHub',auth_server:$('authServer').value,redirect_server:$('redirectServer').value,debug:$('debug').checked?'true':'false'})})
+  fetch('/api/save_service',{method:'POST',body:new URLSearchParams({port:v,log_file:$('logFile').value,download_dir:$('downloadDir').value,update_channel:(document.querySelector('input[name="updateCh"]:checked')||{}).value||'GitHub',auth_server:$('authServer').value,redirect_server:$('redirectServer').value,debug:$('debug').checked?'true':'false',auto_open_webui:$('autoOpenWebui').checked?'true':'false'})})
   .then(r=>r.json()).then(d=>{
     if(!d.ok){toast('保存失败: '+(d.error||''));return}
     if(d.port_changed){

@@ -329,12 +329,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
         auth_server = self._param(p, "auth_server", DEFAULT_AUTH_SERVER)
         redirect_server = self._param(p, "redirect_server", DEFAULT_REDIRECT_SERVER)
         debug = self._param(p, "debug", "false").lower() in ("true", "1")
+        auto_open_webui = self._param(p, "auto_open_webui", "false").lower() in ("true", "1")
         port_changed = port != read_port()
         write_env(port=str(port), log_file=log_file, download_dir=download_dir,
                   update_channel=update_channel,
                   auth_server=auth_server,
                   redirect_server=redirect_server,
-                  debug=str(debug).lower())
+                  debug=str(debug).lower(),
+                  auto_open_webui=str(auto_open_webui).lower())
         self._json({"ok": True, "port_changed": port_changed})
         if port_changed:
             threading.Timer(SHUTDOWN_DELAY, _shutdown).start()

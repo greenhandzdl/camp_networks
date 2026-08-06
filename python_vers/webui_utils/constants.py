@@ -60,5 +60,6 @@ ENV_DEFAULTS = {
     "update_channel": "GitHub",
     "auth_server": DEFAULT_AUTH_SERVER,
     "redirect_server": DEFAULT_REDIRECT_SERVER,
+    "auto_open_webui": "false",
 }
 ENV_KEYS = list(ENV_DEFAULTS)
