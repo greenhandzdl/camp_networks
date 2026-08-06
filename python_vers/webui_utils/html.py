@@ -536,8 +536,8 @@ function loadChannelTable(){
         +(isBuiltin
           ?'<span style="flex:1;font-size:13px;color:var(--text);min-width:60px">'+ch[k]+'</span><span style="font-size:11px;color:var(--text2);padding:2px 8px;border:1px solid var(--border);border-radius:6px;white-space:nowrap">内置</span>'
           :'<input type="text" id="'+inputId+'" value="'+ch[k]+'" style="flex:1;min-width:100px;padding:6px 8px;background:var(--bg2,var(--bg));border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none">'
-           +'<button class="btn btn-outline" style="padding:8px 14px;font-size:13px;white-space:nowrap" onclick="modifyChannel(\''+k+'\')">保存</button>'
-           +'<button class="btn btn-outline" style="padding:8px 14px;font-size:13px;white-space:nowrap" onclick="deleteChannel(\''+k+'\')">删除</button>')
+           +'<button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:13px;white-space:nowrap" onclick="modifyChannel(\''+k+'\')">保存</button>'
+           +'<button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:13px;white-space:nowrap" onclick="deleteChannel(\''+k+'\')">删除</button>')
         +'</div>';
     });
     tb.innerHTML=h;
