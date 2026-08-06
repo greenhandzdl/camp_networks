@@ -150,7 +150,7 @@ border-radius:10px;transition:color .2s}
       <div class="form-group"><label>目标 WiFi 名称（ESSID）</label>
         <div style="display:flex;gap:8px">
           <input type="text" id="targetEssid" placeholder="校园网 WiFi 名称" style="flex:1">
-          <button class="btn btn-outline" style="width:auto;padding:12px 14px" onclick="fillEssid()">获取当前</button>
+          <button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:13px" onclick="fillEssid()">获取当前</button>
         </div></div>
       <div class="form-group"><label>运行间隔（分钟）</label>
         <input type="number" id="autoInterval" min="1" inputmode="numeric" placeholder="__INTERVAL__"></div>
@@ -209,7 +209,7 @@ border-radius:10px;transition:color .2s}
       <div style="display:flex;gap:6px;margin-top:10px">
         <input type="text" id="chSuffix" placeholder="后缀 (如 @edu)" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
         <input type="text" id="chLabel" placeholder="显示名" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none">
-        <button class="btn btn-outline" style="width:auto;padding:10px 14px" onclick="addChannel()">添加</button>
+        <button class="btn btn-outline" style="width:auto;padding:8px 14px;font-size:13px" onclick="addChannel()">添加</button>
       </div>
     </div>
   </div>
@@ -487,10 +487,19 @@ function deleteAccount(){
 }
 
 function restoreFromConfig(){
-  fetch('/api/config').then(r=>r.json()).then(c=>{
-    $('username').value=c.username||'';
-    $('password').value=c.password||'';
-    toast('已从配置文件还原');
+  const idx=$('accountSelect').value;
+  if(idx===''||idx===null)return toast('请先选择要还原的账号');
+  fetch('/api/account_detail?index='+idx).then(r=>r.json()).then(a=>{
+    if(!a.ok)return toast('获取账号信息失败');
+    fetch('/api/save',{method:'POST',body:new URLSearchParams({
+      username:a.username,password:a.password,suffix:$('suffix').value})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){
+        $('username').value=a.username;
+        $('password').value=a.password;
+        toast('已还原账号 '+a.username+' 到认证配置');
+      }else toast('保存失败: '+d.error);
+    }).catch(()=>toast('网络错误'));
   }).catch(()=>toast('网络错误'));
 }
 
@@ -517,7 +526,6 @@ function populateSuffixSelect(ch,defSuffix){
 
 function loadChannelTable(){
   fetch('/api/channels').then(r=>r.json()).then(ch=>{
-    populateSuffixSelect(ch,$('suffix').value??DFT_SUFFIX);
     const tb=$('channelTbody');
     let h='';
     Object.keys(ch).forEach(k=>{
@@ -528,8 +536,8 @@ function loadChannelTable(){
         +(isBuiltin
           ?'<span style="flex:1;font-size:13px;color:var(--text);min-width:60px">'+ch[k]+'</span><span style="font-size:11px;color:var(--text2);padding:2px 8px;border:1px solid var(--border);border-radius:6px;white-space:nowrap">内置</span>'
           :'<input type="text" id="'+inputId+'" value="'+ch[k]+'" style="flex:1;min-width:100px;padding:6px 8px;background:var(--bg2,var(--bg));border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none">'
-           +'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick="modifyChannel(\''+k+'\')">保存</button>'
-           +'<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;white-space:nowrap" onclick="deleteChannel(\''+k+'\')">删除</button>')
+           +'<button class="btn btn-outline" style="padding:8px 14px;font-size:13px;white-space:nowrap" onclick="modifyChannel(\''+k+'\')">保存</button>'
+           +'<button class="btn btn-outline" style="padding:8px 14px;font-size:13px;white-space:nowrap" onclick="deleteChannel(\''+k+'\')">删除</button>')
         +'</div>';
     });
     tb.innerHTML=h;

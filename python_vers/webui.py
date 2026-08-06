@@ -42,7 +42,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _post_params(self):
         length = int(self.headers.get("Content-Length", 0))
-        return parse_qs(self.rfile.read(length).decode())
+        return parse_qs(self.rfile.read(length).decode(), keep_blank_values=True)
 
     def _param(self, params, key, default=""):
         return params.get(key, [default])[0].strip()

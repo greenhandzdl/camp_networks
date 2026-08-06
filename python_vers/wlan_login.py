@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, parse_qs, quote, urlencode
 
 import requests
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 
 # ---------- 配置文件路径：从环境变量获取模块根目录 ----------
 CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/modules/drcom-wlan-login")
@@ -27,7 +27,10 @@ load_dotenv(ENV_PATH)
 
 USERNAME = os.getenv("USERNAME", "")
 PASSWORD = os.getenv("PASSWORD", "")
-ACCOUNT_SUFFIX = os.getenv("SUFFIX", "@cmcc")
+# 直接从 config.env 文件读取 SUFFIX，绕过 load_dotenv(override=False) 对空值无效的问题
+# 当 config.env 中 SUFFIX=（空）时，load_dotenv 不会覆盖父进程环境中已存在的 SUFFIX 变量
+_env_cfg = dotenv_values(ENV_PATH)
+ACCOUNT_SUFFIX = _env_cfg.get("SUFFIX", "@cmcc")
 DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 IPV6_ADDRESS = os.getenv("IPV6_ADDRESS", "")
 AUTH_SERVER = os.getenv("AUTH_SERVER", "10.0.1.5")
