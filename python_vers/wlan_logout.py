@@ -36,25 +36,18 @@ def main():
 
     host = state.get("host", "")
     username = state.get("username", "")
-    # 优先使用完整 user_account（含后缀），兼容旧版仅保存 username 的状态
-    user_account = state.get("user_account", "")
-    if not user_account and username:
-        # 旧版状态：尝试从 config.env 读取 suffix 拼接
-        from dotenv import dotenv_values as _dv
-        _cfg = _dv(os.path.join(CONFIG_DIR, "config.env"))
-        suffix = _cfg.get("SUFFIX", "")
-        user_account = f",0,{username}{suffix}"
     wlan_user_mac = state.get("wlan_user_mac", "")
     wlan_user_ip = state.get("wlan_user_ip", "")
 
-    if not all([host, user_account, wlan_user_mac, wlan_user_ip]):
+    if not all([host, username, wlan_user_mac, wlan_user_ip]):
         print("❌ 登录状态文件参数不完整。")
         return EXIT_NO_STATE
 
     v = str(random.randint(1000, 9999))
+    # 登出接口 user_account 只需要纯用户名，不需要登录时的 ,0,user@suffix 格式
     params = {
         "callback": "dr1002",
-        "user_account": user_account,
+        "user_account": username,
         "wlan_user_mac": wlan_user_mac,
         "wlan_user_ip": wlan_user_ip,
         "jsVersion": "4.2",
@@ -67,7 +60,7 @@ def main():
     if DEBUG:
         print(f"[DEBUG] 登出 URL: {url}")
 
-    print(f"正在登出... (host={host}, account={user_account})")
+    print(f"正在登出... (host={host}, account={username})")
     try:
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
