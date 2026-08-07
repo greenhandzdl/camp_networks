@@ -8,7 +8,6 @@ import sys
 from urllib.parse import urlencode, quote
 
 import requests
-from dotenv import load_dotenv
 
 # ---------- 配置文件路径 ----------
 CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/modules/drcom-wlan-login")
@@ -22,7 +21,6 @@ EXIT_LOGOUT_FAILED = 3
 
 
 def main():
-    load_dotenv(os.path.join(CONFIG_DIR, "config.env"))
     DEBUG = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
 
     if not os.path.exists(STATE_PATH):

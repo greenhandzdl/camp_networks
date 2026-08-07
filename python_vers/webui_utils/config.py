@@ -86,13 +86,17 @@ def write_accounts(accounts):
     _write_json(ACCOUNTS_PATH, accounts)
 
 
-def add_account(username, password):
+def add_account(username, password, overwrite=False):
     if not username:
         return False, "用户名不能为空"
     accounts = read_accounts()
-    for a in accounts:
+    for i, a in enumerate(accounts):
         if a.get("username") == username:
-            return False, "账号已存在"
+            if not overwrite:
+                return False, "账号已存在"
+            accounts[i] = {"username": username, "password": password}
+            write_accounts(accounts)
+            return True, "覆盖成功"
     accounts.append({"username": username, "password": password})
     write_accounts(accounts)
     return True, "保存成功"
@@ -152,6 +156,8 @@ def delete_channel(suffix):
 
 
 def modify_channel(suffix, label):
+    if suffix in BUILTIN_CHANNEL_SUFFIXES:
+        return False, "内置渠道不可修改"
     channels = read_channels()
     if suffix not in channels:
         return False, "渠道不存在"

@@ -476,8 +476,8 @@ function saveAccount(){
   if(!u)return toast('请输入账号');
   const exists=_accountsCache.some(a=>a.username===u);
   if(exists&&!confirm('账号 '+u+' 已存在，是否覆盖？'))return;
-  fetch('/api/save_account',{method:'POST',body:new URLSearchParams({username:u,password:p})})
-    .then(r=>r.json()).then(d=>{toast(d.ok?'账号已保存':'保存失败: '+d.error);if(d.ok)loadAccounts()})
+  fetch('/api/save_account',{method:'POST',body:new URLSearchParams({username:u,password:p,overwrite:exists?'true':'false'})})
+    .then(r=>r.json()).then(d=>{toast(d.ok?(exists?'已覆盖账号 '+u:'账号已保存'):('保存失败: '+d.error));if(d.ok)loadAccounts()})
     .catch(()=>toast('网络错误'));
 }
 

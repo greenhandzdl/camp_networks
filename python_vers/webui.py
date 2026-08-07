@@ -8,7 +8,7 @@ import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from webui_utils.constants import (
     DEFAULT_PORT, DEFAULT_SUFFIX, DEFAULT_LOG_FILE, DEFAULT_DOWNLOAD_DIR,
@@ -124,8 +124,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_task_result(self):
         """轮询任务结果：?id=N"""
-        from urllib.parse import urlparse, parse_qs as _pq
-        qs = _pq(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query)
         try:
             tid = int(qs.get("id", [0])[0])
         except (ValueError, IndexError):
@@ -191,8 +190,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_logout_result(self):
         """轮询登出任务结果：?id=N"""
-        from urllib.parse import urlparse, parse_qs as _pq
-        qs = _pq(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query)
         try:
             tid = int(qs.get("id", [0])[0])
         except (ValueError, IndexError):
@@ -211,8 +209,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_account_detail(self):
         """获取单个账号完整信息（含原始密码）"""
-        from urllib.parse import urlparse, parse_qs as _pq
-        qs = _pq(urlparse(self.path).query)
+        qs = parse_qs(urlparse(self.path).query)
         try:
             index = int(qs.get("index", [0])[0])
         except (ValueError, IndexError):
@@ -246,7 +243,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
         p = self._post_params()
         username = self._param(p, "username")
         password = self._param(p, "password")
-        ok, msg = add_account(username, password)
+        overwrite = self._param(p, "overwrite", "false").lower() in ("true", "1")
+        ok, msg = add_account(username, password, overwrite=overwrite)
         self._json({"ok": ok, "error": "" if ok else msg})
 
     def _api_delete_account(self):
