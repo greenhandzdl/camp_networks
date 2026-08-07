@@ -12,16 +12,23 @@ from .constants import (
 )
 
 
-def _parse_env(path):
-    """通用 .env 文件解析"""
-    cfg = dict(ENV_DEFAULTS)
+def _parse_kv_file(path, lower_keys=False):
+    """通用 key=value 文件解析（跳过注释和空行）"""
+    result = {}
     if os.path.exists(path):
         with open(path, "r") as f:
             for line in f:
                 line = line.strip()
                 if "=" in line and not line.startswith("#"):
                     k, v = line.split("=", 1)
-                    cfg[k.lower()] = v
+                    result[k.lower() if lower_keys else k] = v
+    return result
+
+
+def _parse_env(path):
+    """config.env 解析（key 统一小写）"""
+    cfg = dict(ENV_DEFAULTS)
+    cfg.update(_parse_kv_file(path, lower_keys=True))
     return cfg
 
 
@@ -50,21 +57,13 @@ def read_port():
 
 
 def read_module_prop():
-    prop = {}
-    if os.path.exists(PROP_PATH):
-        with open(PROP_PATH, "r") as f:
-            for line in f:
-                line = line.strip()
-                if "=" in line and not line.startswith("#"):
-                    k, v = line.split("=", 1)
-                    prop[k] = v
-    return prop
+    return _parse_kv_file(PROP_PATH)
 
 
 # ===================== 账号记忆 =====================
 
 def _read_json(path):
-    """读取 JSON 文件，不存在则返回空列表/字典"""
+    """读取 JSON 文件，不存在则返回 None"""
     if not os.path.exists(path):
         return None
     with open(path, "r") as f:

@@ -4,6 +4,7 @@
 
 import json
 import os
+import sys
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -95,14 +96,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     # ---------- GET 处理 ----------
     def _serve_html(self):
-        html = (HTML_PAGE.replace("__SUFFIX__", DEFAULT_SUFFIX)
-                .replace("__PORT__", str(DEFAULT_PORT))
-                .replace("__LOGFILE__", DEFAULT_LOG_FILE)
-                .replace("__DOWNLOAD__", DEFAULT_DOWNLOAD_DIR)
-                .replace("__INTERVAL__", str(DEFAULT_AUTO_INTERVAL))
-                .replace("__DELAY__", str(DEFAULT_AUTO_DELAY))
-                .replace("__AUTH_SERVER__", DEFAULT_AUTH_SERVER)
-                .replace("__REDIRECT_SERVER__", DEFAULT_REDIRECT_SERVER))
+        html = HTML_PAGE
+        for placeholder, value in {
+            "__SUFFIX__": DEFAULT_SUFFIX, "__PORT__": str(DEFAULT_PORT),
+            "__LOGFILE__": DEFAULT_LOG_FILE, "__DOWNLOAD__": DEFAULT_DOWNLOAD_DIR,
+            "__INTERVAL__": str(DEFAULT_AUTO_INTERVAL), "__DELAY__": str(DEFAULT_AUTO_DELAY),
+            "__AUTH_SERVER__": DEFAULT_AUTH_SERVER,
+            "__REDIRECT_SERVER__": DEFAULT_REDIRECT_SERVER,
+        }.items():
+            html = html.replace(placeholder, value)
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -201,11 +203,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._json({"done": True, "ok": r["ok"], "output": r["output"]})
 
     def _api_accounts(self):
-        accounts = read_accounts()
-        result = []
-        for a in accounts:
-            result.append({"username": a.get("username", ""), "password": "****"})
-        self._json(result)
+        self._json([{"username": a.get("username", ""), "password": "****"}
+                    for a in read_accounts()])
 
     def _api_account_detail(self):
         """获取单个账号完整信息（含原始密码）"""
@@ -354,7 +353,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
     def handle_error(self, request, client_address):
         """抑制无害的 BrokenPipeError / ConnectionResetError"""
-        import traceback, sys
         exc = sys.exc_info()[1]
         if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
             return  # 客户端断开连接，无需记录

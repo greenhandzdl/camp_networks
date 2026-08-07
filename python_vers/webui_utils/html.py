@@ -268,6 +268,9 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2000)}
 function btnLoading(b,t){b.disabled=true;b.innerHTML='<span class="spinner"></span> '+t}
 function btnReset(b,t){b.disabled=false;const s=b.querySelector('span');if(s)s.innerHTML=t;else b.textContent=t}
+function setRunBtn(ready){const b=$('btnRun'),t=$('btnRunText');if(ready){_runBusy=false;btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success')}else{_runBusy=true;b.disabled=false;b.classList.remove('btn-success');b.classList.add('btn-warn');t.innerHTML='■ 停止任务 (手动)'}}
+function setLogoutBtn(ready){_logoutBusy=!ready;btnReset($('btnLogout'),'&#128682; 登出')}
+function pollTask(tid,endpoint,onDone,onErr){const iv=setInterval(()=>{fetch(endpoint+'?id='+tid).then(r=>r.json()).then(r=>{if(!r.done)return;clearInterval(iv);onDone(r)}).catch(()=>{clearInterval(iv);onErr&&onErr()})},500)}
 function showTab(t){
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('show',p.id==='page-'+t));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===t));
@@ -284,33 +287,18 @@ function saveConfig(){
 
 function runAuth(){
   if(_runBusy){stopRun();return}
-  const b=$('btnRun'),t=$('btnRunText'),o=$('authOutput'),s=$('authStatus');
-  // 立即切换按钮为停止状态
-  _runBusy=true;
-  b.disabled=false;b.classList.remove('btn-success');b.classList.add('btn-warn');
-  t.innerHTML='■ 停止任务 (手动)';
+  const o=$('authOutput'),s=$('authStatus');
+  setRunBtn(false);
   o.className='output-box show';o.textContent='正在启动认证脚本...\n';s.innerHTML='';
   fetch('/api/run').then(r=>r.json()).then(d=>{
-    if(d.error==='busy'){toast('已有任务运行中');_runBusy=false;
-      btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');return}
-    const tid=d.task_id;
-    // 轮询任务结果
-    const iv=setInterval(()=>{
-      fetch('/api/task_result?id='+tid).then(r=>r.json()).then(r=>{
-        if(!r.done)return;
-        clearInterval(iv);
-        _runBusy=false;
-        o.textContent=r.output||'(无输出)';
-        s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 认证完成</div>'
-          :'<div class="status-bar err">&#10007; 执行异常</div>';
-        btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
-        pollRunStatus();
-      }).catch(()=>{clearInterval(iv);_runBusy=false;
-        btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');});
-    },500);
+    if(d.error==='busy'){toast('已有任务运行中');setRunBtn(true);return}
+    pollTask(d.task_id,'/api/task_result',r=>{
+      o.textContent=r.output||'(无输出)';
+      s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 认证完成</div>':'<div class="status-bar err">&#10007; 执行异常</div>';
+      setRunBtn(true);pollRunStatus();
+    },()=>setRunBtn(true));
   }).catch(e=>{o.textContent='请求失败: '+e;
-    s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';
-    _runBusy=false;btnReset(b,'&#9654; 立即认证');b.classList.remove('btn-warn');b.classList.add('btn-success');
+    s.innerHTML='<div class="status-bar err">&#10007; 请求失败</div>';setRunBtn(true);
   });
 }
 
@@ -585,19 +573,13 @@ function runLogout(){
   btnLoading(b,'登出中...');
   o.className='output-box show';o.textContent='正在执行登出...\n';s.innerHTML='';
   fetch('/api/logout').then(r=>r.json()).then(d=>{
-    if(d.error==='busy'){toast('已有登出任务运行中');_logoutBusy=false;btnReset(b,'&#128682; 登出');return}
-    const tid=d.task_id;
-    const iv=setInterval(()=>{
-      fetch('/api/logout_result?id='+tid).then(r=>r.json()).then(r=>{
-        if(!r.done)return;
-        clearInterval(iv);_logoutBusy=false;
-        o.textContent=r.output||'(无输出)';
-        s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 登出完成</div>'
-          :'<div class="status-bar err">&#10007; 登出异常</div>';
-        btnReset(b,'&#128682; 登出');
-      }).catch(()=>{clearInterval(iv);_logoutBusy=false;btnReset(b,'&#128682; 登出')});
-    },500);
-  }).catch(e=>{o.textContent='请求失败: '+e;_logoutBusy=false;btnReset(b,'&#128682; 登出')});
+    if(d.error==='busy'){toast('已有登出任务运行中');setLogoutBtn(true);return}
+    pollTask(d.task_id,'/api/logout_result',r=>{
+      o.textContent=r.output||'(无输出)';
+      s.innerHTML=r.ok?'<div class="status-bar ok">&#10003; 登出完成</div>':'<div class="status-bar err">&#10007; 登出异常</div>';
+      setLogoutBtn(true);
+    },()=>setLogoutBtn(true));
+  }).catch(e=>{o.textContent='请求失败: '+e;setLogoutBtn(true)});
 }
 </script>
 </body>

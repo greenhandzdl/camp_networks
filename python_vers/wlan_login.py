@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, parse_qs, quote, urlencode
 
 import requests
-from dotenv import load_dotenv, dotenv_values
+from dotenv import dotenv_values
 
 # ---------- 配置文件路径：从环境变量获取模块根目录 ----------
 CONFIG_DIR = os.environ.get("DRCOM_CONFIG_DIR", "/data/adb/modules/drcom-wlan-login")
@@ -23,18 +23,14 @@ if not os.path.exists(ENV_PATH):
     print("❌ 配置文件 config.env 不存在，请先通过 WebUI 保存设置。")
     sys.exit(1)
 
-load_dotenv(ENV_PATH)
-
-USERNAME = os.getenv("USERNAME", "")
-PASSWORD = os.getenv("PASSWORD", "")
-# 直接从 config.env 文件读取 SUFFIX，绕过 load_dotenv(override=False) 对空值无效的问题
-# 当 config.env 中 SUFFIX=（空）时，load_dotenv 不会覆盖父进程环境中已存在的 SUFFIX 变量
-_env_cfg = dotenv_values(ENV_PATH)
-ACCOUNT_SUFFIX = _env_cfg.get("SUFFIX", "@cmcc")
-DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
-IPV6_ADDRESS = os.getenv("IPV6_ADDRESS", "")
-AUTH_SERVER = os.getenv("AUTH_SERVER", "10.0.1.5")
-REDIRECT_SERVER = os.getenv("REDIRECT_SERVER", "1.2.3.4")
+_cfg = dotenv_values(ENV_PATH)
+USERNAME = _cfg.get("USERNAME", "")
+PASSWORD = _cfg.get("PASSWORD", "")
+ACCOUNT_SUFFIX = _cfg.get("SUFFIX", "@cmcc")
+DEBUG = _cfg.get("DEBUG", "false").lower() in ("true", "1", "yes")
+IPV6_ADDRESS = _cfg.get("IPV6_ADDRESS", "")
+AUTH_SERVER = _cfg.get("AUTH_SERVER", "10.0.1.5")
+REDIRECT_SERVER = _cfg.get("REDIRECT_SERVER", "1.2.3.4")
 
 # ---------- 返回码 ----------
 EXIT_SUCCESS = 0
