@@ -224,6 +224,12 @@ KV = """
             size_hint_y: None
             height: 30
 
+        MyLabel:
+            id: update_label
+            text: ''
+            size_hint_y: None
+            height: 30
+
         ScrollView:
             Label:
                 id: log_text
@@ -247,6 +253,13 @@ KV = """
                 text: '清除日志'
                 background_color: rgba('#DC2626')
                 on_press: root.clear_log()
+
+        MyButton:
+            text: '检查更新'
+            size_hint_y: None
+            height: 50
+            background_color: rgba('#059669')
+            on_press: root.check_update()
 """
 
 
@@ -430,6 +443,35 @@ class AboutScreen(Screen):
 
     def _set_log(self, log):
         self.ids.log_text.text = log or "暂无日志"
+
+    def check_update(self):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        self.ids.update_label.text = '检查中...'
+        threading.Thread(target=self._check_update_bg, daemon=True).start()
+
+    def _check_update_bg(self):
+        try:
+            import requests
+            resp = requests.get(
+                "https://raw.githubusercontent.com/greenhandzdl/"
+                "camp_networks_magisk/main/update.json",
+                timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            remote_version = data.get("version", "")
+            remote_code = int(data.get("versionCode", 0))
+            if remote_code > __version_code__:
+                msg = f"有新版本: {remote_version} (当前 {__version__})"
+            else:
+                msg = f"已是最新 ({__version__})"
+        except Exception as e:
+            msg = f"检查失败: {e}"
+        Clock.schedule_once(lambda dt: self._set_update(msg), 0)
+
+    def _set_update(self, msg):
+        self.ids.update_label.text = msg
 
     def clear_log(self):
         app = App.get_running_app()
