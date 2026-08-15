@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+!buildozer.spec
+
+# Buildozer (Kivy APK build)
+.buildozer/
+android_app/bin/
