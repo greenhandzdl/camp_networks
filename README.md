@@ -10,12 +10,24 @@
 camp_networks/
 ├── LICENSE
 ├── README.md
-└── python_vers/
-    ├── requirements.txt
-    ├── wired_login.py      # 有线版认证脚本
-    ├── wlan_login.py       # 无线版认证脚本
-    ├── .env                # 本地环境变量（不提交）
-    └── .env.example        # 环境变量模板
+├── python_vers/
+│   ├── requirements.txt
+│   ├── drcom_core.py          # 平台无关认证核心库（模块 + APK 共用）
+│   ├── wired_login.py         # 有线版认证脚本
+│   ├── wlan_login.py          # 无线认证 CLI（薄封装 drcom_core）
+│   ├── wlan_logout.py         # 登出 CLI（薄封装 drcom_core）
+│   ├── webui.py               # WebUI HTTP 服务主程序
+│   ├── webui_utils/           # WebUI 工具模块
+│   ├── tests/                 # 单元测试
+│   ├── .env                   # 本地环境变量（不提交）
+│   └── .env.example           # 环境变量模板
+└── android_app/               # Kivy APK 工程
+    ├── buildozer.spec
+    ├── build_apk.sh
+    └── app/
+        ├── main.py            # Kivy App 入口
+        ├── backend.py         # LocalBackend / ModuleBackend 抽象
+        └── native_net.py      # pyjnius WifiManager
 ```
 
 ---
@@ -151,3 +163,19 @@ AUTH_SERVER=10.0.1.5         # 认证服务器 IP（一般固定）
 ---
 
 > **注意**：本脚本仅供学习与研究使用，请勿用于任何违规用途。使用前请确保已获得校园网管理方的授权。
+
+---
+
+## Kivy APK
+
+`android_app/` 提供 Kivy 跨平台 APK 工程，复用 `drcom_core.py` 认证核心：
+
+- **无 root**：本地模式，APK 内直接执行认证
+- **root + 模块已装**：模块模式，通过 WebUI HTTP API 操作
+
+构建 APK：
+```bash
+cd android_app
+pip install buildozer
+bash build_apk.sh
+```
