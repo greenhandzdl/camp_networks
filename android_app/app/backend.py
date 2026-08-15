@@ -298,7 +298,7 @@ class LocalBackend(Backend):
     def get_wifi_info(self) -> Dict:
         # 桌面/无 root 用空值占位（Android 上由 native_net 补全）
         try:
-            from . import native_net
+            import native_net
             return native_net.get_wifi_info()
         except Exception:
             return {"ssid": "", "ip": "", "mac": "", "ipv6": ""}

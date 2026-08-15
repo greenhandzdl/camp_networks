@@ -55,12 +55,11 @@ cd "$SCRIPT_DIR"
 info "执行 buildozer android debug"
 buildozer android debug
 
-# 产物路径
-APK_PATH="$SCRIPT_DIR/bin/${PACKAGE_NAME:-drcomwlan}-${VERSION_NAME}-debug.apk"
-# buildozer 默认输出路径
-APK_DEFAULT="$SCRIPT_DIR/bin/drcomwlan-${VERSION_NAME}-debug.apk"
-if [ -f "$APK_DEFAULT" ]; then
-    APK_PATH="$APK_DEFAULT"
+# 产物路径（buildozer 输出在 bin/ 目录）
+APK_PATH=$(find "$SCRIPT_DIR/bin" -name "*.apk" -type f 2>/dev/null | head -1)
+if [ -z "$APK_PATH" ]; then
+    err "未找到 APK 产物"
+    exit 1
 fi
 
 ok "构建完成: $APK_PATH"

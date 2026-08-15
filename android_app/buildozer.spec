@@ -79,7 +79,7 @@ android.ndk = 25b
 
 # (int) selects which android architecture to build for
 # 0 = all, 1 = armeabi-v7a, 2 = arm64-v8a, 3 = x86, 4 = x86_64
-#android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a, armeabi-v7a
 
 # (str) logcat filter to use
 #android.logcat_filters = *:S python:D
