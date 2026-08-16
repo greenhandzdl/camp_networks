@@ -36,7 +36,7 @@ version = 3.0.0
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3==3.12.8,kivy,requests,pyjnius,android
+requirements = python3,kivy,requests,pyjnius,android
 
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/data/presplash.png
@@ -86,6 +86,9 @@ android.archs = arm64-v8a, armeabi-v7a
 
 # (bool) If True, use AndroidX (instead of old support library)
 android.enable_androidx = True
+
+# (str) p4a fork/branch to use (pinned to stable release to avoid Python 3.14 pip issues)
+p4a.url = https://github.com/kivy/python-for-android.git@2024.1.21
 
 [buildozer]
 
