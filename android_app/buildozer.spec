@@ -87,9 +87,9 @@ android.archs = arm64-v8a, armeabi-v7a
 # (bool) If True, use AndroidX (instead of old support library)
 android.enable_androidx = True
 
-# (str) p4a fork/branch to use (pinned to stable release to avoid Python 3.14 pip issues)
-p4a.url = https://github.com/kivy/python-for-android.git
-p4a.version = 2024.1.21
+# (str) p4a fork/branch to use
+# (通过 CI 预克隆稳定版本到 .buildozer 目录实现版本控制，buildozer 不识别 p4a.version 选项)
+#p4a.url = https://github.com/kivy/python-for-android.git
 
 [buildozer]
 
