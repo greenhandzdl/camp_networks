@@ -87,9 +87,10 @@ android.archs = arm64-v8a, armeabi-v7a
 # (bool) If True, use AndroidX (instead of old support library)
 android.enable_androidx = True
 
-# (str) p4a fork/branch to use
-# (通过 CI 预克隆 v2024.01.21 稳定版到 .buildozer 目录实现版本控制)
-#p4a.url = https://github.com/kivy/python-for-android.git
+# (str) Use local p4a source directory (bypass buildozer git clone/pull)
+# buildozer 默认克隆 master 分支，其 Python 3.14 有 pip 兼容问题
+# 通过 CI 预克隆 v2024.01.21 稳定版到此路径，buildozer 跳过所有 git 操作
+p4a.source_dir = ~/p4a-source
 
 [buildozer]
 
