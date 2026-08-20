@@ -63,6 +63,9 @@ android.minapi = 21
 # (str) Android NDK version to use
 android.ndk = 25b
 
+# (bool) Automatically accept Android SDK license
+android.accept_sdk_license = True
+
 # (bool) Indicate whether the screen should stay on
 # Don't forget to add the WAKE_LOCK permission if you set this to True
 #android.wakelock = False

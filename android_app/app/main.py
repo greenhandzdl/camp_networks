@@ -23,6 +23,37 @@ from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
+from kivy.core.text import LabelBase
+
+# ---------- 注册支持中文的默认字体 ----------
+# Kivy 默认 Roboto 不含 CJK 字符，Android 系统自带 CJK 字体
+# 将系统字体注册为 'Roboto' 使所有控件自动使用
+def _register_cjk_font():
+    """将 Android 系统 CJK 字体注册为 Kivy 默认字体"""
+    candidates = [
+        # Android 7+ 思源黑体 (单字体文件，优先)
+        '/system/fonts/NotoSansSC-Regular.otf',
+        '/system/fonts/NotoSansSC-Medium.otf',
+        '/system/fonts/NotoSansCJK-Regular.otf',
+        # Android 7+ 思源黑体 (合集文件)
+        '/system/fonts/NotoSansCJK-Regular.ttc',
+        # Android < 7 后备字体
+        '/system/fonts/DroidSansFallback.ttf',
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                LabelBase.register('Roboto', fn_regular=path, fn_bold=path)
+                from kivy.logger import Logger
+                Logger.info(f'App: CJK font registered: {path}')
+                return
+            except Exception as e:
+                from kivy.logger import Logger
+                Logger.warning(f'App: Failed to register {path}: {e}')
+    from kivy.logger import Logger
+    Logger.warning('App: No CJK system font found, Chinese may display as squares')
+
+_register_cjk_font()
 
 # drcom_core 由 build_apk.sh 拷贝到 app/ 目录
 import drcom_core
@@ -45,14 +76,25 @@ KV = """
     color: rgba('#FFFFFF')
     bold: True
     font_size: '16sp'
+    font_name: 'Roboto'
 
 <MyLabel@Label>:
     color: rgba('#E2E8F0')
     font_size: '14sp'
+    font_name: 'Roboto'
 
 <TitleLabel@Label>:
     color: rgba('#FFFFFF')
     font_size: '20sp'
+    bold: True
+    font_name: 'Roboto'
+
+<NavButton@Button>:
+    background_normal: ''
+    background_color: rgba('#1E293B')
+    color: rgba('#94A3B8')
+    font_size: '14sp'
+    font_name: 'Roboto'
     bold: True
 
 <StatusScreen>:
@@ -107,9 +149,11 @@ KV = """
                 height: self.texture_size[1]
                 color: rgba('#E2E8F0')
                 font_size: '13sp'
+                font_name: 'Roboto'
                 text_size: self.width, None
                 halign: 'left'
                 valign: 'top'
+                padding: [4, 4]
 
 
 <ConfigScreen>:
@@ -137,6 +181,7 @@ KV = """
                 TextInput:
                     id: username
                     hint_text: '请输入用户名'
+                    font_name: 'Roboto'
                     size_hint_y: None
                     height: 40
                     multiline: False
@@ -149,6 +194,7 @@ KV = """
                     id: password
                     hint_text: '请输入密码'
                     password: True
+                    font_name: 'Roboto'
                     size_hint_y: None
                     height: 40
                     multiline: False
@@ -161,6 +207,7 @@ KV = """
                     id: suffix
                     hint_text: '@cmcc'
                     text: '@cmcc'
+                    font_name: 'Roboto'
                     size_hint_y: None
                     height: 40
                     multiline: False
@@ -173,6 +220,7 @@ KV = """
                     id: auth_server
                     hint_text: '10.0.1.5'
                     text: '10.0.1.5'
+                    font_name: 'Roboto'
                     size_hint_y: None
                     height: 40
                     multiline: False
@@ -185,6 +233,7 @@ KV = """
                     id: redirect_server
                     hint_text: '1.2.3.4'
                     text: '1.2.3.4'
+                    font_name: 'Roboto'
                     size_hint_y: None
                     height: 40
                     multiline: False
@@ -238,6 +287,7 @@ KV = """
                 height: self.texture_size[1]
                 color: rgba('#E2E8F0')
                 font_size: '12sp'
+                font_name: 'Roboto'
                 text_size: self.width, None
                 halign: 'left'
                 valign: 'top'
@@ -484,8 +534,10 @@ class DrComApp(App):
     title = "Dr.COM WLAN"
 
     def build(self):
-        # 窗口大小（桌面模式默认，Android 全屏）
-        Window.size = (400, 700)
+        # 窗口大小：仅桌面模式设置固定尺寸，Android 全屏
+        from kivy.utils import platform
+        if platform != 'android':
+            Window.size = (400, 700)
         # 深色背景
         Window.clearcolor = (0.09, 0.11, 0.16, 1)
 
@@ -501,10 +553,26 @@ class DrComApp(App):
         root.add_widget(sm)
 
         nav = BoxLayout(size_hint_y=None, height=50, spacing=0)
+        nav_buttons = {}
+        ACTIVE_COLOR = (0.145, 0.388, 0.922, 1)  # #2563EB
+        INACTIVE_COLOR = (0.118, 0.161, 0.231, 1)  # #1E293B
+
+        def _on_screen_change(instance, value):
+            for name, btn in nav_buttons.items():
+                btn.background_color = ACTIVE_COLOR if name == value else INACTIVE_COLOR
+                btn.color = (1, 1, 1, 1) if name == value else (0.58, 0.64, 0.72, 1)
+
         for label, screen in [("状态", "status"), ("配置", "config"), ("关于", "about")]:
-            btn = Button(text=label, size_hint=(1, 1))
+            btn = Button(text=label, size_hint=(1, 1), font_name='Roboto',
+                         background_normal='', background_color=INACTIVE_COLOR,
+                         color=(0.58, 0.64, 0.72, 1), bold=True, font_size='14sp')
             btn.bind(on_press=lambda inst, s=screen: setattr(sm, "current", s))
+            nav_buttons[screen] = btn
             nav.add_widget(btn)
+        sm.bind(current=_on_screen_change)
+        # 默认高亮“状态”页
+        nav_buttons["status"].background_color = ACTIVE_COLOR
+        nav_buttons["status"].color = (1, 1, 1, 1)
         root.add_widget(nav)
 
         # 后台初始化 backend
