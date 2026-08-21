@@ -163,6 +163,7 @@ KV = """
         spacing: 12
 
         TitleLabel:
+            id: config_title
             text: '配置'
             size_hint_y: None
             height: 40
@@ -243,6 +244,13 @@ KV = """
             size_hint_y: None
             height: 50
             on_press: root.save()
+
+        MyLabel:
+            id: save_status
+            text: ''
+            size_hint_y: None
+            height: 24
+            color: rgba('#10B981')
 
 
 <AboutScreen>:
@@ -431,29 +439,35 @@ class ConfigScreen(Screen):
         app = App.get_running_app()
         if not app or not app.backend:
             return
+        username = self.ids.username.text.strip()
+        password = self.ids.password.text
+        if not username or not password:
+            self.ids.save_status.text = '用户名和密码不能为空'
+            self.ids.save_status.color = (0.86, 0.15, 0.15, 1)
+            return
         cfg = DrComConfig(
-            username=self.ids.username.text.strip(),
-            password=self.ids.password.text,
+            username=username,
+            password=password,
             suffix=self.ids.suffix.text.strip(),
             auth_server=self.ids.auth_server.text.strip(),
             redirect_server=self.ids.redirect_server.text.strip(),
         )
-        if not cfg.username or not cfg.password:
-            return
+        self.ids.save_status.text = '保存中...'
+        self.ids.save_status.color = (0.88, 0.91, 0.94, 1)
         threading.Thread(target=self._save_bg, args=(cfg,), daemon=True).start()
 
     def _save_bg(self, cfg):
         app = App.get_running_app()
         ok = app.backend.save_config(cfg)
-        msg = "配置已保存" if ok else "保存失败"
-        Clock.schedule_once(lambda dt: self._save_done(msg), 0)
+        Clock.schedule_once(lambda dt: self._save_done(ok), 0)
 
-    def _save_done(self, msg):
-        # 简单 toast 效果：临时改标题（桌面/Android 都可用）
-        from kivy.core.window import Window as W
-        # Kivy 内置 toast 不跨平台，简单使用 Logger
-        from kivy.logger import Logger
-        Logger.info(f"Config: {msg}")
+    def _save_done(self, ok):
+        if ok:
+            self.ids.save_status.text = '配置已保存'
+            self.ids.save_status.color = (0.06, 0.72, 0.51, 1)
+        else:
+            self.ids.save_status.text = '保存失败，请重试'
+            self.ids.save_status.color = (0.86, 0.15, 0.15, 1)
 
 
 class AboutScreen(Screen):
@@ -593,17 +607,26 @@ class DrComApp(App):
         Clock.schedule_once(lambda dt: self._on_backend_ready(), 0)
 
     def _on_backend_ready(self):
-        # 触发状态页刷新
-        sm = self.root.children[1]  # ScreenManager（第一个添加的 child 在 children[-1]）
-        # Kivy children 顺序是添加的反序，最后添加的在 children[0]
+        """backend 初始化完成后刷新状态页。"""
+        app = App.get_running_app()
+        if not app:
+            return
         for child in self.root.children:
             if isinstance(child, ScreenManager):
-                sm = child
+                if child.current == "status":
+                    for screen in child.screens:
+                        if screen.name == "status":
+                            screen.refresh_env()
                 break
-        if sm.current == "status":
-            for screen in sm.screens:
-                if screen.name == "status":
-                    screen.refresh_env()
+
+    def on_stop(self):
+        """应用退出时停止 WebUI（模块模式）。"""
+        try:
+            from backend import ModuleBackend, stop_webui
+            if isinstance(self.backend, ModuleBackend):
+                stop_webui(self.backend._port)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
