@@ -25,19 +25,15 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 from kivy.core.text import LabelBase
 
+
 # ---------- 注册支持中文的默认字体 ----------
-# Kivy 默认 Roboto 不含 CJK 字符，Android 系统自带 CJK 字体
-# 将系统字体注册为 'Roboto' 使所有控件自动使用
 def _register_cjk_font():
-    """将 Android 系统 CJK 字体注册为 Kivy 默认字体"""
+    """将 Android 系统 CJK 字体注册为 Kivy 默认字体。"""
     candidates = [
-        # Android 7+ 思源黑体 (单字体文件，优先)
         '/system/fonts/NotoSansSC-Regular.otf',
         '/system/fonts/NotoSansSC-Medium.otf',
         '/system/fonts/NotoSansCJK-Regular.otf',
-        # Android 7+ 思源黑体 (合集文件)
         '/system/fonts/NotoSansCJK-Regular.ttc',
-        # Android < 7 后备字体
         '/system/fonts/DroidSansFallback.ttf',
     ]
     for path in candidates:
@@ -72,237 +68,228 @@ KV = """
 
 <MyButton@Button>:
     background_normal: ''
+    background_down: ''
     background_color: rgba('#2563EB')
     color: rgba('#FFFFFF')
     bold: True
     font_size: '16sp'
     font_name: 'Roboto'
+    on_press: self.background_color = rgba('#1D4ED8')
+    on_release: self.background_color = rgba('#2563EB')
 
 <MyLabel@Label>:
-    color: rgba('#E2E8F0')
+    color: rgba('#CBD5E1')
     font_size: '14sp'
     font_name: 'Roboto'
 
 <TitleLabel@Label>:
-    color: rgba('#FFFFFF')
-    font_size: '20sp'
+    color: rgba('#F8FAFC')
+    font_size: '22sp'
     bold: True
     font_name: 'Roboto'
 
-<NavButton@Button>:
-    background_normal: ''
-    background_color: rgba('#1E293B')
-    color: rgba('#94A3B8')
-    font_size: '14sp'
+<DTextInput@TextInput>:
     font_name: 'Roboto'
-    bold: True
+    size_hint_y: None
+    height: 44
+    multiline: False
+    background_normal: ''
+    background_active: ''
+    background_color: rgba('#1E293B')
+    foreground_color: rgba('#E2E8F0')
+    hint_text_color: rgba('#64748B')
+    cursor_color: rgba('#E2E8F0')
+    padding: [12, 10]
+
+<OutputLabel@Label>:
+    size_hint_y: None
+    height: self.texture_size[1]
+    color: rgba('#94A3B8')
+    font_size: '13sp'
+    font_name: 'Roboto'
+    text_size: self.width, None
+    halign: 'left'
+    valign: 'top'
+    padding: [8, 8]
+
 
 <StatusScreen>:
     BoxLayout:
         orientation: 'vertical'
         padding: 16
-        spacing: 12
+        spacing: 10
 
         TitleLabel:
             text: 'Dr.COM WLAN'
             size_hint_y: None
-            height: 40
+            height: 36
 
         MyLabel:
             id: env_info
             text: '环境检测中...'
             size_hint_y: None
-            height: 30
+            height: 24
+            font_size: '13sp'
+            color: rgba('#64748B')
 
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
-            height: 40
-            spacing: 8
+            height: 28
+            spacing: 16
             MyLabel:
                 id: ssid_label
-                text: 'SSID: --'
+                text: 'WiFi: --'
+                font_size: '13sp'
             MyLabel:
                 id: ip_label
                 text: 'IP: --'
+                font_size: '13sp'
 
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
-            height: 50
+            height: 48
             spacing: 12
             MyButton:
                 id: btn_login
-                text: '登录'
+                text: '  登录  '
                 on_press: root.do_login()
             MyButton:
                 id: btn_logout
-                text: '登出'
+                text: '  登出  '
                 background_color: rgba('#DC2626')
                 on_press: root.do_logout()
+                on_release: self.background_color = rgba('#DC2626')
 
         ScrollView:
-            Label:
+            OutputLabel:
                 id: output
                 text: ''
-                size_hint_y: None
-                height: self.texture_size[1]
-                color: rgba('#E2E8F0')
-                font_size: '13sp'
-                font_name: 'Roboto'
-                text_size: self.width, None
-                halign: 'left'
-                valign: 'top'
-                padding: [4, 4]
 
 
 <ConfigScreen>:
     BoxLayout:
         orientation: 'vertical'
         padding: 16
-        spacing: 12
+        spacing: 10
 
         TitleLabel:
-            id: config_title
             text: '配置'
             size_hint_y: None
-            height: 40
+            height: 36
 
         ScrollView:
             BoxLayout:
                 orientation: 'vertical'
-                spacing: 8
+                spacing: 6
+                padding: [0, 4, 0, 4]
                 size_hint_y: None
                 height: self.minimum_height
 
                 MyLabel:
                     text: '用户名'
                     size_hint_y: None
-                    height: 24
-                TextInput:
+                    height: 22
+                DTextInput:
                     id: username
                     hint_text: '请输入用户名'
-                    font_name: 'Roboto'
-                    size_hint_y: None
-                    height: 40
-                    multiline: False
 
                 MyLabel:
                     text: '密码'
                     size_hint_y: None
-                    height: 24
-                TextInput:
+                    height: 22
+                DTextInput:
                     id: password
                     hint_text: '请输入密码'
                     password: True
-                    font_name: 'Roboto'
-                    size_hint_y: None
-                    height: 40
-                    multiline: False
 
                 MyLabel:
                     text: '运营商后缀'
                     size_hint_y: None
-                    height: 24
-                TextInput:
+                    height: 22
+                DTextInput:
                     id: suffix
                     hint_text: '@cmcc'
                     text: '@cmcc'
-                    font_name: 'Roboto'
-                    size_hint_y: None
-                    height: 40
-                    multiline: False
 
                 MyLabel:
                     text: '认证服务器'
                     size_hint_y: None
-                    height: 24
-                TextInput:
+                    height: 22
+                DTextInput:
                     id: auth_server
                     hint_text: '10.0.1.5'
                     text: '10.0.1.5'
-                    font_name: 'Roboto'
-                    size_hint_y: None
-                    height: 40
-                    multiline: False
 
                 MyLabel:
                     text: '重定向网关'
                     size_hint_y: None
-                    height: 24
-                TextInput:
+                    height: 22
+                DTextInput:
                     id: redirect_server
                     hint_text: '1.2.3.4'
                     text: '1.2.3.4'
-                    font_name: 'Roboto'
-                    size_hint_y: None
-                    height: 40
-                    multiline: False
 
         MyButton:
             text: '保存配置'
             size_hint_y: None
-            height: 50
+            height: 48
             on_press: root.save()
 
         MyLabel:
             id: save_status
             text: ''
             size_hint_y: None
-            height: 24
-            color: rgba('#10B981')
+            height: 22
+            font_size: '13sp'
 
 
 <AboutScreen>:
     BoxLayout:
         orientation: 'vertical'
         padding: 16
-        spacing: 12
+        spacing: 8
 
         TitleLabel:
             text: '关于'
             size_hint_y: None
-            height: 40
+            height: 36
 
         MyLabel:
-            text: 'Dr.COM WLAN APK v' + root.version
+            text: 'Dr.COM WLAN v' + root.version
             size_hint_y: None
-            height: 30
+            height: 26
 
         MyLabel:
             id: mode_label
             text: '运行模式: --'
             size_hint_y: None
-            height: 30
+            height: 24
+            font_size: '13sp'
 
         MyLabel:
             id: module_label
             text: '模块状态: --'
             size_hint_y: None
-            height: 30
+            height: 24
+            font_size: '13sp'
 
         MyLabel:
             id: update_label
             text: ''
             size_hint_y: None
-            height: 30
+            height: 24
+            font_size: '13sp'
 
         ScrollView:
-            Label:
+            OutputLabel:
                 id: log_text
                 text: '暂无日志'
-                size_hint_y: None
-                height: self.texture_size[1]
-                color: rgba('#E2E8F0')
-                font_size: '12sp'
-                font_name: 'Roboto'
-                text_size: self.width, None
-                halign: 'left'
-                valign: 'top'
 
         BoxLayout:
             size_hint_y: None
-            height: 50
+            height: 44
             spacing: 12
             MyButton:
                 text: '查看日志'
@@ -311,94 +298,89 @@ KV = """
                 text: '清除日志'
                 background_color: rgba('#DC2626')
                 on_press: root.clear_log()
+                on_release: self.background_color = rgba('#DC2626')
 
         MyButton:
             text: '检查更新'
             size_hint_y: None
-            height: 50
+            height: 44
             background_color: rgba('#059669')
             on_press: root.check_update()
+            on_release: self.background_color = rgba('#059669')
 """
-
 
 Builder.load_string(KV)
 
 
 class StatusScreen(Screen):
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.app_ref = None
         self._task_id = None
         self._poll_event = None
 
     def on_enter(self, *args):
-        app = App.get_running_app()
-        if app:
-            self.app_ref = app
         self.refresh_env()
 
     def refresh_env(self):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         if not app or not app.backend:
             return
         threading.Thread(target=self._refresh_env_bg, daemon=True).start()
 
     def _refresh_env_bg(self):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         info = app.backend.get_env_info()
         wifi = app.backend.get_wifi_info()
-        mode = "模块模式 (root)" if info["mode"] == "module" else "本地模式"
+        mode = "模块模式" if info["mode"] == "module" else "本地模式"
         ssid = wifi.get("ssid") or "--"
         ip = wifi.get("ip") or "--"
-        Clock.schedule_once(lambda dt: self._update_ui(mode, ssid, ip), 0)
+        Clock.schedule_once(lambda dt: self._update_ui(mode, ssid, ip))
 
     def _update_ui(self, mode, ssid, ip):
         self.ids.env_info.text = f"模式: {mode}"
-        self.ids.ssid_label.text = f"SSID: {ssid}"
+        self.ids.ssid_label.text = f"WiFi: {ssid}"
         self.ids.ip_label.text = f"IP: {ip}"
 
     def do_login(self):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         if not app or not app.backend:
             return
         self.ids.btn_login.disabled = True
-        self.ids.output.text = "正在启动登录...\n"
+        self.ids.output.text = "正在登录...\n"
         threading.Thread(target=self._do_login_bg, daemon=True).start()
 
     def _do_login_bg(self):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         tid, err = app.backend.login_async()
         if err:
-            Clock.schedule_once(lambda dt: self._login_error(err), 0)
+            Clock.schedule_once(lambda dt: self._login_done(False, err))
             return
         self._task_id = tid
         self._poll_event = Clock.schedule_interval(self._poll_login, 0.5)
 
     def _poll_login(self, dt):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         if self._task_id is None:
             return False
         result = app.backend.get_login_result(self._task_id)
         if result is None:
-            return True  # 继续轮询
-        Clock.schedule_once(lambda dt: self._login_done(result), 0)
+            return True
+        # 先取消轮询，再调度 UI 更新，避免竞态
         if self._poll_event:
             self._poll_event.cancel()
+            self._poll_event = None
+        Clock.schedule_once(lambda dt: self._login_done(result.get("ok", False),
+                                                       result.get("output", "")))
         return False
 
-    def _login_done(self, result):
+    def _login_done(self, ok, output):
         self.ids.btn_login.disabled = False
-        ok = result.get("ok", False)
-        output = result.get("output", "")
         self.ids.output.text = output + f"\n\n{'认证成功' if ok else '认证失败'}"
         self.refresh_env()
 
-    def _login_error(self, msg):
-        self.ids.btn_login.disabled = False
-        self.ids.output.text = f"错误: {msg}"
-
     def do_logout(self):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         if not app or not app.backend:
             return
         self.ids.btn_logout.disabled = True
@@ -406,9 +388,9 @@ class StatusScreen(Screen):
         threading.Thread(target=self._do_logout_bg, daemon=True).start()
 
     def _do_logout_bg(self):
-        app = self.app_ref or App.get_running_app()
+        app = App.get_running_app()
         ok, msg = app.backend.logout()
-        Clock.schedule_once(lambda dt: self._logout_done(ok, msg), 0)
+        Clock.schedule_once(lambda dt: self._logout_done(ok, msg))
 
     def _logout_done(self, ok, msg):
         self.ids.btn_logout.disabled = False
@@ -416,6 +398,7 @@ class StatusScreen(Screen):
 
 
 class ConfigScreen(Screen):
+
     def on_enter(self, *args):
         app = App.get_running_app()
         if not app or not app.backend:
@@ -423,9 +406,8 @@ class ConfigScreen(Screen):
         threading.Thread(target=self._load_bg, daemon=True).start()
 
     def _load_bg(self):
-        app = App.get_running_app()
-        cfg = app.backend.load_config()
-        Clock.schedule_once(lambda dt: self._fill(cfg), 0)
+        cfg = App.get_running_app().backend.load_config()
+        Clock.schedule_once(lambda dt: self._fill(cfg))
 
     def _fill(self, cfg):
         if cfg:
@@ -441,9 +423,10 @@ class ConfigScreen(Screen):
             return
         username = self.ids.username.text.strip()
         password = self.ids.password.text
+        status = self.ids.save_status
         if not username or not password:
-            self.ids.save_status.text = '用户名和密码不能为空'
-            self.ids.save_status.color = (0.86, 0.15, 0.15, 1)
+            status.text = '用户名和密码不能为空'
+            status.color = (0.86, 0.15, 0.15, 1)
             return
         cfg = DrComConfig(
             username=username,
@@ -452,22 +435,22 @@ class ConfigScreen(Screen):
             auth_server=self.ids.auth_server.text.strip(),
             redirect_server=self.ids.redirect_server.text.strip(),
         )
-        self.ids.save_status.text = '保存中...'
-        self.ids.save_status.color = (0.88, 0.91, 0.94, 1)
+        status.text = '保存中...'
+        status.color = (0.88, 0.91, 0.94, 1)
         threading.Thread(target=self._save_bg, args=(cfg,), daemon=True).start()
 
     def _save_bg(self, cfg):
-        app = App.get_running_app()
-        ok = app.backend.save_config(cfg)
-        Clock.schedule_once(lambda dt: self._save_done(ok), 0)
+        ok = App.get_running_app().backend.save_config(cfg)
+        Clock.schedule_once(lambda dt: self._save_done(ok))
 
     def _save_done(self, ok):
+        status = self.ids.save_status
         if ok:
-            self.ids.save_status.text = '配置已保存'
-            self.ids.save_status.color = (0.06, 0.72, 0.51, 1)
+            status.text = '配置已保存'
+            status.color = (0.06, 0.72, 0.51, 1)
         else:
-            self.ids.save_status.text = '保存失败，请重试'
-            self.ids.save_status.color = (0.86, 0.15, 0.15, 1)
+            status.text = '保存失败，请重试'
+            status.color = (0.86, 0.15, 0.15, 1)
 
 
 class AboutScreen(Screen):
@@ -483,12 +466,9 @@ class AboutScreen(Screen):
         app = App.get_running_app()
         info = app.backend.get_env_info()
         mode = "模块模式" if info["mode"] == "module" else "本地模式"
-        mod_info = info.get("module", {})
-        if mod_info.get("installed"):
-            mod_status = f"已安装 ({mod_info.get('version', '?')})"
-        else:
-            mod_status = "未安装"
-        Clock.schedule_once(lambda dt: self._update_ui(mode, mod_status), 0)
+        mod = info.get("module", {})
+        mod_status = f"已安装 ({mod.get('version', '?')})" if mod.get("installed") else "未安装"
+        Clock.schedule_once(lambda dt: self._update_ui(mode, mod_status))
 
     def _update_ui(self, mode, mod_status):
         self.ids.mode_label.text = f"运行模式: {mode}"
@@ -501,12 +481,17 @@ class AboutScreen(Screen):
         threading.Thread(target=self._refresh_log_bg, daemon=True).start()
 
     def _refresh_log_bg(self):
-        app = App.get_running_app()
-        log = app.backend.get_log()
-        Clock.schedule_once(lambda dt: self._set_log(log), 0)
+        log = App.get_running_app().backend.get_log()
+        Clock.schedule_once(lambda dt: self._set_log(log))
 
     def _set_log(self, log):
         self.ids.log_text.text = log or "暂无日志"
+
+    def clear_log(self):
+        app = App.get_running_app()
+        if app and app.backend:
+            app.backend.clear_log()
+            self.ids.log_text.text = "日志已清除"
 
     def check_update(self):
         app = App.get_running_app()
@@ -520,76 +505,62 @@ class AboutScreen(Screen):
             import requests
             resp = requests.get(
                 "https://raw.githubusercontent.com/greenhandzdl/"
-                "camp_networks_magisk/main/update.json",
-                timeout=10)
+                "camp_networks_magisk/main/update.json", timeout=10)
             resp.raise_for_status()
             data = resp.json()
-            remote_version = data.get("version", "")
             remote_code = int(data.get("versionCode", 0))
             if remote_code > __version_code__:
-                msg = f"有新版本: {remote_version} (当前 {__version__})"
+                msg = f"有新版本: {data.get('version', '')} (当前 {__version__})"
             else:
                 msg = f"已是最新 ({__version__})"
         except Exception as e:
             msg = f"检查失败: {e}"
-        Clock.schedule_once(lambda dt: self._set_update(msg), 0)
-
-    def _set_update(self, msg):
-        self.ids.update_label.text = msg
-
-    def clear_log(self):
-        app = App.get_running_app()
-        if app and app.backend:
-            app.backend.clear_log()
-            self.ids.log_text.text = "日志已清除"
+        Clock.schedule_once(lambda dt: setattr(self.ids.update_label, 'text', msg))
 
 
 class DrComApp(App):
     title = "Dr.COM WLAN"
 
     def build(self):
-        # 窗口大小：仅桌面模式设置固定尺寸，Android 全屏
         from kivy.utils import platform
         if platform != 'android':
             Window.size = (400, 700)
-        # 深色背景
-        Window.clearcolor = (0.09, 0.11, 0.16, 1)
+        Window.clearcolor = (0.06, 0.07, 0.11, 1)  # #0F1219
 
-        # 初始化 backend（可能耗时，放后台）
         self.backend = None
         sm = ScreenManager()
         sm.add_widget(StatusScreen(name="status"))
         sm.add_widget(ConfigScreen(name="config"))
         sm.add_widget(AboutScreen(name="about"))
 
-        # 添加底部导航栏
         root = BoxLayout(orientation="vertical")
         root.add_widget(sm)
 
-        nav = BoxLayout(size_hint_y=None, height=50, spacing=0)
-        nav_buttons = {}
-        ACTIVE_COLOR = (0.145, 0.388, 0.922, 1)  # #2563EB
-        INACTIVE_COLOR = (0.118, 0.161, 0.231, 1)  # #1E293B
+        # 底部导航栏
+        ACTIVE = (0.145, 0.388, 0.922, 1)    # #2563EB
+        INACTIVE = (0.09, 0.11, 0.16, 1)     # 同背景色
+        nav_btns = {}
 
-        def _on_screen_change(instance, value):
-            for name, btn in nav_buttons.items():
-                btn.background_color = ACTIVE_COLOR if name == value else INACTIVE_COLOR
-                btn.color = (1, 1, 1, 1) if name == value else (0.58, 0.64, 0.72, 1)
+        def _on_change(instance, value):
+            for name, btn in nav_btns.items():
+                active = (name == value)
+                btn.background_color = ACTIVE if active else INACTIVE
+                btn.color = (1, 1, 1, 1) if active else (0.45, 0.50, 0.58, 1)
 
+        nav = BoxLayout(size_hint_y=None, height=48, spacing=2)
         for label, screen in [("状态", "status"), ("配置", "config"), ("关于", "about")]:
             btn = Button(text=label, size_hint=(1, 1), font_name='Roboto',
-                         background_normal='', background_color=INACTIVE_COLOR,
-                         color=(0.58, 0.64, 0.72, 1), bold=True, font_size='14sp')
+                         background_normal='', background_down='',
+                         background_color=INACTIVE,
+                         color=(0.45, 0.50, 0.58, 1), bold=True, font_size='14sp')
             btn.bind(on_press=lambda inst, s=screen: setattr(sm, "current", s))
-            nav_buttons[screen] = btn
+            nav_btns[screen] = btn
             nav.add_widget(btn)
-        sm.bind(current=_on_screen_change)
-        # 默认高亮“状态”页
-        nav_buttons["status"].background_color = ACTIVE_COLOR
-        nav_buttons["status"].color = (1, 1, 1, 1)
+        sm.bind(current=_on_change)
+        nav_btns["status"].background_color = ACTIVE
+        nav_btns["status"].color = (1, 1, 1, 1)
         root.add_widget(nav)
 
-        # 后台初始化 backend
         Clock.schedule_once(lambda dt: self._init_backend(), 0.1)
         return root
 
@@ -603,21 +574,16 @@ class DrComApp(App):
         except Exception as e:
             from kivy.logger import Logger
             Logger.error(f"Backend init failed: {e}")
-            self.backend = None
-        Clock.schedule_once(lambda dt: self._on_backend_ready(), 0)
+        Clock.schedule_once(lambda dt: self._on_backend_ready())
 
     def _on_backend_ready(self):
-        """backend 初始化完成后刷新状态页。"""
-        app = App.get_running_app()
-        if not app:
-            return
-        for child in self.root.children:
-            if isinstance(child, ScreenManager):
-                if child.current == "status":
-                    for screen in child.screens:
-                        if screen.name == "status":
-                            screen.refresh_env()
-                break
+        """backend 就绪后刷新状态页。"""
+        sm = self.root.children[0] if self.root else None
+        if isinstance(sm, ScreenManager) and sm.current == "status":
+            for screen in sm.screens:
+                if screen.name == "status":
+                    screen.refresh_env()
+                    break
 
     def on_stop(self):
         """应用退出时停止 WebUI（模块模式）。"""

@@ -398,9 +398,22 @@ class ModuleBackend(Backend):
 
     def logout(self) -> Tuple[bool, str]:
         try:
+            # /api/logout 是异步的，返回 task_id，需轮询结果
             resp = requests.get(f"{self._base}/api/logout", timeout=3)
             d = resp.json()
-            return d.get("ok", False), d.get("output", "")
+            if d.get("error") == "busy":
+                return False, "已有任务运行中"
+            tid = d.get("task_id")
+            if tid is None:
+                return False, "登出请求失败"
+            for _ in range(20):  # 最多等 10 秒
+                time.sleep(0.5)
+                r = requests.get(
+                    f"{self._base}/api/logout_result?id={tid}", timeout=2)
+                rd = r.json()
+                if rd.get("done"):
+                    return rd.get("ok", False), rd.get("output", "")
+            return False, "登出超时"
         except Exception as e:
             return False, str(e)
 
@@ -421,7 +434,7 @@ class ModuleBackend(Backend):
 
     def clear_log(self):
         try:
-            requests.get(f"{self._base}/api/clear_log", timeout=3)
+            requests.post(f"{self._base}/api/clear_log", timeout=3)
         except Exception:
             pass
 
