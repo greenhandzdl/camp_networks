@@ -18,6 +18,7 @@ import os
 import subprocess
 import threading
 import time
+import webbrowser
 from typing import Dict, List, Optional, Tuple
 
 import requests
@@ -143,6 +144,10 @@ class Backend:
 
     def clear_log(self):
         raise NotImplementedError
+
+    def open_webui(self) -> Tuple[bool, str]:
+        """打开模块 WebUI 面板。"""
+        return False, "不支持"
 
 
 # ---------- LocalBackend（无 root / 桌面调试）----------
@@ -317,6 +322,31 @@ class LocalBackend(Backend):
         except OSError:
             pass
 
+    def open_webui(self) -> Tuple[bool, str]:
+        """本地模式下手动启动 WebUI 并打开浏览器。"""
+        mod = detect_module()
+        if not mod.get("installed"):
+            return False, "模块未安装"
+        port = mod.get("port", 8080)
+        if not mod.get("running"):
+            start_webui(port)
+            time.sleep(2)
+            mod = detect_module()
+        if mod.get("running"):
+            url = f"http://127.0.0.1:{port}"
+            try:
+                from jnius import autoclass
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
+                activity = autoclass(
+                    'org.kivy.android.PythonActivity').mActivity
+                activity.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            except Exception:
+                webbrowser.open(url)
+            return True, url
+        return False, "WebUI 启动失败"
+
     def _save_log(self, text: str):
         try:
             from datetime import datetime
@@ -437,6 +467,20 @@ class ModuleBackend(Backend):
             requests.post(f"{self._base}/api/clear_log", timeout=3)
         except Exception:
             pass
+
+    def open_webui(self) -> Tuple[bool, str]:
+        url = f"{self._base}"
+        try:
+            from jnius import autoclass
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            activity = autoclass(
+                'org.kivy.android.PythonActivity').mActivity
+            activity.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        except Exception:
+            webbrowser.open(url)
+        return True, url
 
 
 # ---------- 工厂函数 ----------

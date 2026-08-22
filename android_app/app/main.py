@@ -72,26 +72,27 @@ KV = """
     background_color: rgba('#2563EB')
     color: rgba('#FFFFFF')
     bold: True
-    font_size: '16sp'
+    font_size: '14sp'
     font_name: 'Roboto'
     on_press: self.background_color = rgba('#1D4ED8')
     on_release: self.background_color = rgba('#2563EB')
 
 <MyLabel@Label>:
     color: rgba('#CBD5E1')
-    font_size: '14sp'
+    font_size: '12sp'
     font_name: 'Roboto'
 
 <TitleLabel@Label>:
     color: rgba('#F8FAFC')
-    font_size: '22sp'
+    font_size: '18sp'
     bold: True
     font_name: 'Roboto'
 
 <DTextInput@TextInput>:
     font_name: 'Roboto'
+    font_size: '13sp'
     size_hint_y: None
-    height: 44
+    height: 50
     multiline: False
     background_normal: ''
     background_active: ''
@@ -105,7 +106,7 @@ KV = """
     size_hint_y: None
     height: self.texture_size[1]
     color: rgba('#94A3B8')
-    font_size: '13sp'
+    font_size: '12sp'
     font_name: 'Roboto'
     text_size: self.width, None
     halign: 'left'
@@ -128,14 +129,14 @@ KV = """
             id: env_info
             text: '环境检测中...'
             size_hint_y: None
-            height: 24
+            height: 22
             font_size: '13sp'
             color: rgba('#64748B')
 
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
-            height: 28
+            height: 24
             spacing: 16
             MyLabel:
                 id: ssid_label
@@ -161,6 +162,16 @@ KV = """
                 background_color: rgba('#DC2626')
                 on_press: root.do_logout()
                 on_release: self.background_color = rgba('#DC2626')
+
+        MyButton:
+            id: btn_webui
+            text: '打开 WebUI 面板'
+            size_hint_y: None
+            height: 0
+            opacity: 0
+            background_color: rgba('#059669')
+            on_press: root.open_webui()
+            on_release: self.background_color = rgba('#059669')
 
         ScrollView:
             OutputLabel:
@@ -335,12 +346,22 @@ class StatusScreen(Screen):
         mode = "模块模式" if info["mode"] == "module" else "本地模式"
         ssid = wifi.get("ssid") or "--"
         ip = wifi.get("ip") or "--"
-        Clock.schedule_once(lambda dt: self._update_ui(mode, ssid, ip))
+        Clock.schedule_once(
+            lambda dt: self._update_ui(mode, ssid, ip, info))
 
-    def _update_ui(self, mode, ssid, ip):
+    def _update_ui(self, mode, ssid, ip, info):
         self.ids.env_info.text = f"模式: {mode}"
         self.ids.ssid_label.text = f"WiFi: {ssid}"
         self.ids.ip_label.text = f"IP: {ip}"
+        # 本地模式 + root + 模块已装 → 显示打开 WebUI 按钮
+        btn = self.ids.btn_webui
+        if info["mode"] == "local" and info.get("has_root") \
+                and info.get("module", {}).get("installed"):
+            btn.height = 44
+            btn.opacity = 1
+        else:
+            btn.height = 0
+            btn.opacity = 0
 
     def do_login(self):
         app = App.get_running_app()
@@ -378,6 +399,24 @@ class StatusScreen(Screen):
         self.ids.btn_login.disabled = False
         self.ids.output.text = output + f"\n\n{'认证成功' if ok else '认证失败'}"
         self.refresh_env()
+
+    def open_webui(self):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        self.ids.output.text = "正在启动 WebUI...\n"
+        threading.Thread(target=self._open_webui_bg, daemon=True).start()
+
+    def _open_webui_bg(self):
+        app = App.get_running_app()
+        ok, msg = app.backend.open_webui()
+        Clock.schedule_once(lambda dt: self._webui_done(ok, msg))
+
+    def _webui_done(self, ok, msg):
+        if ok:
+            self.ids.output.text = f"WebUI 已打开: {msg}\n请在浏览器中操作。"
+        else:
+            self.ids.output.text = f"无法打开: {msg}"
 
     def do_logout(self):
         app = App.get_running_app()
@@ -552,7 +591,7 @@ class DrComApp(App):
             btn = Button(text=label, size_hint=(1, 1), font_name='Roboto',
                          background_normal='', background_down='',
                          background_color=INACTIVE,
-                         color=(0.45, 0.50, 0.58, 1), bold=True, font_size='14sp')
+                         color=(0.45, 0.50, 0.58, 1), bold=True, font_size='13sp')
             btn.bind(on_press=lambda inst, s=screen: setattr(sm, "current", s))
             nav_btns[screen] = btn
             nav.add_widget(btn)
