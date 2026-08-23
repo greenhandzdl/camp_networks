@@ -90,9 +90,9 @@ KV = """
 
 <DTextInput@TextInput>:
     font_name: 'Roboto'
-    font_size: '13sp'
+    font_size: '14sp'
     size_hint_y: None
-    height: 50
+    height: 56
     multiline: False
     background_normal: ''
     background_active: ''
@@ -100,7 +100,7 @@ KV = """
     foreground_color: rgba('#E2E8F0')
     hint_text_color: rgba('#64748B')
     cursor_color: rgba('#E2E8F0')
-    padding: [12, 10]
+    padding: [12, 16]
 
 <OutputLabel@Label>:
     size_hint_y: None
@@ -112,6 +112,28 @@ KV = """
     halign: 'left'
     valign: 'top'
     padding: [8, 8]
+
+<SectionHeader@Label>:
+    color: rgba('#2563EB')
+    font_size: '13sp'
+    font_name: 'Roboto'
+    bold: True
+    size_hint_y: None
+    height: 30
+    padding: [0, 8, 0, 2]
+
+<DSwitch@ToggleButton>:
+    background_normal: ''
+    background_down: ''
+    background_color: rgba('#475569')
+    color: rgba('#FFFFFF')
+    font_name: 'Roboto'
+    font_size: '12sp'
+    bold: True
+    size_hint: None, None
+    size: 52, 30
+    text: '关'
+    on_state: self.text = '开' if self.state == 'down' else '关'; self.background_color = rgba('#2563EB') if self.state == 'down' else rgba('#475569')
 
 
 <StatusScreen>:
@@ -183,64 +205,98 @@ KV = """
     BoxLayout:
         orientation: 'vertical'
         padding: 16
-        spacing: 10
+        spacing: 8
 
         TitleLabel:
             text: '配置'
             size_hint_y: None
-            height: 36
+            height: 34
 
         ScrollView:
             BoxLayout:
                 orientation: 'vertical'
-                spacing: 6
-                padding: [0, 4, 0, 4]
+                spacing: 4
+                padding: [0, 2, 0, 4]
                 size_hint_y: None
                 height: self.minimum_height
 
+                SectionHeader:
+                    text: '账号设置'
                 MyLabel:
                     text: '用户名'
                     size_hint_y: None
-                    height: 22
+                    height: 18
                 DTextInput:
                     id: username
                     hint_text: '请输入用户名'
-
                 MyLabel:
                     text: '密码'
                     size_hint_y: None
-                    height: 22
+                    height: 18
                 DTextInput:
                     id: password
                     hint_text: '请输入密码'
                     password: True
 
+                SectionHeader:
+                    text: '网络设置'
                 MyLabel:
                     text: '运营商后缀'
                     size_hint_y: None
-                    height: 22
+                    height: 18
                 DTextInput:
                     id: suffix
                     hint_text: '@cmcc'
                     text: '@cmcc'
-
                 MyLabel:
                     text: '认证服务器'
                     size_hint_y: None
-                    height: 22
+                    height: 18
                 DTextInput:
                     id: auth_server
                     hint_text: '10.0.1.5'
                     text: '10.0.1.5'
-
                 MyLabel:
                     text: '重定向网关'
                     size_hint_y: None
-                    height: 22
+                    height: 18
                 DTextInput:
                     id: redirect_server
                     hint_text: '1.2.3.4'
                     text: '1.2.3.4'
+
+                SectionHeader:
+                    text: '自动认证'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: 36
+                    spacing: 8
+                    MyLabel:
+                        text: '启用'
+                        size_hint_x: 1
+                    DSwitch:
+                        id: auto_run
+                MyLabel:
+                    text: '目标 WiFi 名称'
+                    size_hint_y: None
+                    height: 18
+                DTextInput:
+                    id: target_essid
+                    hint_text: '留空则对所有 WiFi 生效'
+
+                SectionHeader:
+                    text: '高级'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: 36
+                    spacing: 8
+                    MyLabel:
+                        text: '调试模式'
+                        size_hint_x: 1
+                    DSwitch:
+                        id: debug_switch
 
         MyButton:
             text: '保存配置'
@@ -252,8 +308,7 @@ KV = """
             id: save_status
             text: ''
             size_hint_y: None
-            height: 22
-            font_size: '13sp'
+            height: 20
 
 
 <AboutScreen>:
@@ -449,12 +504,16 @@ class ConfigScreen(Screen):
         Clock.schedule_once(lambda dt: self._fill(cfg))
 
     def _fill(self, cfg):
-        if cfg:
-            self.ids.username.text = cfg.username
-            self.ids.password.text = cfg.password
-            self.ids.suffix.text = cfg.suffix
-            self.ids.auth_server.text = cfg.auth_server
-            self.ids.redirect_server.text = cfg.redirect_server
+        if not cfg:
+            return
+        self.ids.username.text = cfg.username
+        self.ids.password.text = cfg.password
+        self.ids.suffix.text = cfg.suffix
+        self.ids.auth_server.text = cfg.auth_server
+        self.ids.redirect_server.text = cfg.redirect_server
+        self.ids.debug_switch.state = 'down' if cfg.debug else 'normal'
+        self.ids.auto_run.state = 'down' if getattr(cfg, 'auto_run', False) else 'normal'
+        self.ids.target_essid.text = getattr(cfg, 'target_essid', '') or ''
 
     def save(self):
         app = App.get_running_app()
@@ -473,7 +532,10 @@ class ConfigScreen(Screen):
             suffix=self.ids.suffix.text.strip(),
             auth_server=self.ids.auth_server.text.strip(),
             redirect_server=self.ids.redirect_server.text.strip(),
+            debug=self.ids.debug_switch.state == 'down',
         )
+        cfg.auto_run = self.ids.auto_run.state == 'down'
+        cfg.target_essid = self.ids.target_essid.text.strip()
         status.text = '保存中...'
         status.color = (0.88, 0.91, 0.94, 1)
         threading.Thread(target=self._save_bg, args=(cfg,), daemon=True).start()
@@ -617,12 +679,15 @@ class DrComApp(App):
 
     def _on_backend_ready(self):
         """backend 就绪后刷新状态页。"""
-        sm = self.root.children[0] if self.root else None
-        if isinstance(sm, ScreenManager) and sm.current == "status":
-            for screen in sm.screens:
-                if screen.name == "status":
-                    screen.refresh_env()
-                    break
+        if not self.root:
+            return
+        for child in self.root.children:
+            if isinstance(child, ScreenManager):
+                if child.current == "status":
+                    for screen in child.screens:
+                        if screen.name == "status":
+                            screen.refresh_env()
+                break
 
     def on_stop(self):
         """应用退出时停止 WebUI（模块模式）。"""

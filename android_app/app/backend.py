@@ -192,7 +192,7 @@ class LocalBackend(Backend):
                         cfg[k.strip()] = v.strip()
         except OSError:
             return None
-        return DrComConfig(
+        config = DrComConfig(
             username=cfg.get("USERNAME", ""),
             password=cfg.get("PASSWORD", ""),
             suffix=cfg.get("SUFFIX", "@cmcc"),
@@ -201,6 +201,9 @@ class LocalBackend(Backend):
             ipv6=cfg.get("IPV6_ADDRESS", ""),
             debug=cfg.get("DEBUG", "false").lower() in ("true", "1"),
         )
+        config.auto_run = cfg.get("AUTO_RUN", "false").lower() in ("true", "1")
+        config.target_essid = cfg.get("TARGET_ESSID", "")
+        return config
 
     def save_config(self, config: DrComConfig) -> bool:
         try:
@@ -212,6 +215,8 @@ class LocalBackend(Backend):
                 f.write(f"REDIRECT_SERVER={config.redirect_server}\n")
                 f.write(f"IPV6_ADDRESS={config.ipv6}\n")
                 f.write(f"DEBUG={'true' if config.debug else 'false'}\n")
+                f.write(f"AUTO_RUN={'true' if getattr(config, 'auto_run', False) else 'false'}\n")
+                f.write(f"TARGET_ESSID={getattr(config, 'target_essid', '')}\n")
             try:
                 os.chmod(self._config_path, 0o600)
             except OSError:
@@ -377,7 +382,7 @@ class ModuleBackend(Backend):
             resp = requests.get(f"{self._base}/api/config", timeout=3)
             resp.raise_for_status()
             d = resp.json()
-            return DrComConfig(
+            config = DrComConfig(
                 username=d.get("username", ""),
                 password=d.get("password", ""),
                 suffix=d.get("suffix", "@cmcc"),
@@ -386,20 +391,36 @@ class ModuleBackend(Backend):
                 ipv6=d.get("ipv6_address", ""),
                 debug=d.get("debug", "false") == "true",
             )
+            config.auto_run = d.get("auto_run", "false") == "true"
+            config.target_essid = d.get("target_essid", "")
+            return config
         except Exception:
             return None
 
     def save_config(self, config: DrComConfig) -> bool:
         try:
-            # WebUI 端点是 /api/save（非 /api/save_config）
-            resp = requests.post(f"{self._base}/api/save", timeout=3, data={
+            # /api/save 只保存基本账号，其他设置需调不同端点
+            ok = True
+            r = requests.post(f"{self._base}/api/save", timeout=3, data={
                 "username": config.username,
                 "password": config.password,
                 "suffix": config.suffix,
+            })
+            ok = ok and (r.status_code == 200)
+            # 服务器/调试设置（不传 port，保持当前端口不变）
+            r2 = requests.post(f"{self._base}/api/save_service", timeout=3, data={
                 "auth_server": config.auth_server,
                 "redirect_server": config.redirect_server,
+                "debug": str(config.debug).lower(),
             })
-            return resp.status_code == 200
+            ok = ok and (r2.status_code == 200)
+            # 自动认证设置
+            r3 = requests.post(f"{self._base}/api/save_auto", timeout=3, data={
+                "auto_run": str(getattr(config, 'auto_run', False)).lower(),
+                "target_essid": getattr(config, 'target_essid', ''),
+            })
+            ok = ok and (r3.status_code == 200)
+            return ok
         except Exception:
             return False
 
