@@ -17,6 +17,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.lang import Builder
+from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
@@ -72,27 +73,27 @@ KV = """
     background_color: rgba('#2563EB')
     color: rgba('#FFFFFF')
     bold: True
-    font_size: '14sp'
+    font_size: '15sp'
     font_name: 'Roboto'
     on_press: self.background_color = rgba('#1D4ED8')
     on_release: self.background_color = rgba('#2563EB')
 
 <MyLabel@Label>:
     color: rgba('#CBD5E1')
-    font_size: '12sp'
+    font_size: '13sp'
     font_name: 'Roboto'
 
 <TitleLabel@Label>:
     color: rgba('#F8FAFC')
-    font_size: '18sp'
+    font_size: '20sp'
     bold: True
     font_name: 'Roboto'
 
 <DTextInput@TextInput>:
     font_name: 'Roboto'
-    font_size: '14sp'
+    font_size: '15sp'
     size_hint_y: None
-    height: 56
+    height: dp(54)
     multiline: False
     background_normal: ''
     background_active: ''
@@ -100,27 +101,27 @@ KV = """
     foreground_color: rgba('#E2E8F0')
     hint_text_color: rgba('#64748B')
     cursor_color: rgba('#E2E8F0')
-    padding: [12, 16]
+    padding: [dp(14), dp(16)]
 
 <OutputLabel@Label>:
     size_hint_y: None
     height: self.texture_size[1]
     color: rgba('#94A3B8')
-    font_size: '12sp'
+    font_size: '13sp'
     font_name: 'Roboto'
     text_size: self.width, None
     halign: 'left'
     valign: 'top'
-    padding: [8, 8]
+    padding: [dp(8), dp(8)]
 
 <SectionHeader@Label>:
     color: rgba('#2563EB')
-    font_size: '13sp'
+    font_size: '14sp'
     font_name: 'Roboto'
     bold: True
     size_hint_y: None
-    height: 30
-    padding: [0, 8, 0, 2]
+    height: dp(36)
+    padding: [0, dp(10), 0, dp(4)]
 
 <DSwitch@ToggleButton>:
     background_normal: ''
@@ -128,10 +129,10 @@ KV = """
     background_color: rgba('#475569')
     color: rgba('#FFFFFF')
     font_name: 'Roboto'
-    font_size: '12sp'
+    font_size: '13sp'
     bold: True
     size_hint: None, None
-    size: 52, 30
+    size: dp(64), dp(40)
     text: '关'
     on_state: self.text = '开' if self.state == 'down' else '关'; self.background_color = rgba('#2563EB') if self.state == 'down' else rgba('#475569')
 
@@ -139,41 +140,41 @@ KV = """
 <StatusScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: 16
-        spacing: 10
+        padding: dp(16)
+        spacing: dp(10)
 
         TitleLabel:
             text: 'Dr.COM WLAN'
             size_hint_y: None
-            height: 36
+            height: dp(40)
 
         MyLabel:
             id: env_info
             text: '环境检测中...'
             size_hint_y: None
-            height: 22
-            font_size: '13sp'
+            height: dp(28)
+            font_size: '14sp'
             color: rgba('#64748B')
 
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
-            height: 24
-            spacing: 16
+            height: dp(28)
+            spacing: dp(16)
             MyLabel:
                 id: ssid_label
                 text: 'WiFi: --'
-                font_size: '13sp'
+                font_size: '14sp'
             MyLabel:
                 id: ip_label
                 text: 'IP: --'
-                font_size: '13sp'
+                font_size: '14sp'
 
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
-            height: 48
-            spacing: 12
+            height: dp(52)
+            spacing: dp(12)
             MyButton:
                 id: btn_login
                 text: '  登录  '
@@ -204,19 +205,19 @@ KV = """
 <ConfigScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: 16
-        spacing: 8
+        padding: dp(16)
+        spacing: dp(8)
 
         TitleLabel:
             text: '配置'
             size_hint_y: None
-            height: 34
+            height: dp(40)
 
         ScrollView:
             BoxLayout:
                 orientation: 'vertical'
-                spacing: 4
-                padding: [0, 2, 0, 4]
+                spacing: dp(4)
+                padding: [0, dp(2), 0, dp(4)]
                 size_hint_y: None
                 height: self.minimum_height
 
@@ -225,14 +226,14 @@ KV = """
                 MyLabel:
                     text: '用户名'
                     size_hint_y: None
-                    height: 18
+                    height: dp(24)
                 DTextInput:
                     id: username
                     hint_text: '请输入用户名'
                 MyLabel:
                     text: '密码'
                     size_hint_y: None
-                    height: 18
+                    height: dp(24)
                 DTextInput:
                     id: password
                     hint_text: '请输入密码'
@@ -243,7 +244,7 @@ KV = """
                 MyLabel:
                     text: '运营商后缀'
                     size_hint_y: None
-                    height: 18
+                    height: dp(24)
                 DTextInput:
                     id: suffix
                     hint_text: '@cmcc'
@@ -251,7 +252,7 @@ KV = """
                 MyLabel:
                     text: '认证服务器'
                     size_hint_y: None
-                    height: 18
+                    height: dp(24)
                 DTextInput:
                     id: auth_server
                     hint_text: '10.0.1.5'
@@ -259,7 +260,7 @@ KV = """
                 MyLabel:
                     text: '重定向网关'
                     size_hint_y: None
-                    height: 18
+                    height: dp(24)
                 DTextInput:
                     id: redirect_server
                     hint_text: '1.2.3.4'
@@ -270,8 +271,8 @@ KV = """
                 BoxLayout:
                     orientation: 'horizontal'
                     size_hint_y: None
-                    height: 36
-                    spacing: 8
+                    height: dp(44)
+                    spacing: dp(8)
                     MyLabel:
                         text: '启用'
                         size_hint_x: 1
@@ -280,7 +281,7 @@ KV = """
                 MyLabel:
                     text: '目标 WiFi 名称'
                     size_hint_y: None
-                    height: 18
+                    height: dp(24)
                 DTextInput:
                     id: target_essid
                     hint_text: '留空则对所有 WiFi 生效'
@@ -290,8 +291,8 @@ KV = """
                 BoxLayout:
                     orientation: 'horizontal'
                     size_hint_y: None
-                    height: 36
-                    spacing: 8
+                    height: dp(44)
+                    spacing: dp(8)
                     MyLabel:
                         text: '调试模式'
                         size_hint_x: 1
@@ -301,52 +302,52 @@ KV = """
         MyButton:
             text: '保存配置'
             size_hint_y: None
-            height: 48
+            height: dp(52)
             on_press: root.save()
 
         MyLabel:
             id: save_status
             text: ''
             size_hint_y: None
-            height: 20
+            height: dp(24)
 
 
 <AboutScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: 16
-        spacing: 8
+        padding: dp(16)
+        spacing: dp(8)
 
         TitleLabel:
             text: '关于'
             size_hint_y: None
-            height: 36
+            height: dp(40)
 
         MyLabel:
             text: 'Dr.COM WLAN v' + root.version
             size_hint_y: None
-            height: 26
+            height: dp(30)
 
         MyLabel:
             id: mode_label
             text: '运行模式: --'
             size_hint_y: None
-            height: 24
-            font_size: '13sp'
+            height: dp(28)
+            font_size: '14sp'
 
         MyLabel:
             id: module_label
             text: '模块状态: --'
             size_hint_y: None
-            height: 24
-            font_size: '13sp'
+            height: dp(28)
+            font_size: '14sp'
 
         MyLabel:
             id: update_label
             text: ''
             size_hint_y: None
-            height: 24
-            font_size: '13sp'
+            height: dp(28)
+            font_size: '14sp'
 
         ScrollView:
             OutputLabel:
@@ -355,8 +356,8 @@ KV = """
 
         BoxLayout:
             size_hint_y: None
-            height: 44
-            spacing: 12
+            height: dp(52)
+            spacing: dp(12)
             MyButton:
                 text: '查看日志'
                 on_press: root.refresh_log()
@@ -369,7 +370,7 @@ KV = """
         MyButton:
             text: '检查更新'
             size_hint_y: None
-            height: 44
+            height: dp(52)
             background_color: rgba('#059669')
             on_press: root.check_update()
             on_release: self.background_color = rgba('#059669')
@@ -378,45 +379,43 @@ KV = """
 <AccountScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: 16
-        spacing: 8
+        padding: dp(16)
+        spacing: dp(8)
 
         TitleLabel:
             text: '账号管理'
             size_hint_y: None
-            height: 34
+            height: dp(40)
 
         ScrollView:
             BoxLayout:
                 id: accounts_list
                 orientation: 'vertical'
-                spacing: 4
+                spacing: dp(6)
                 size_hint_y: None
                 height: self.minimum_height
 
         MyLabel:
             text: '用户名'
             size_hint_y: None
-            height: 18
+            height: dp(24)
         DTextInput:
             id: acct_username
             hint_text: '用户名'
-            height: 48
 
         MyLabel:
             text: '密码'
             size_hint_y: None
-            height: 18
+            height: dp(24)
         DTextInput:
             id: acct_password
             hint_text: '密码'
             password: True
-            height: 48
 
         BoxLayout:
             size_hint_y: None
-            height: 44
-            spacing: 8
+            height: dp(52)
+            spacing: dp(12)
             MyButton:
                 id: btn_save_acct
                 text: '保存'
@@ -432,51 +431,49 @@ KV = """
             id: acct_status
             text: ''
             size_hint_y: None
-            height: 20
-            font_size: '12sp'
+            height: dp(24)
+            font_size: '13sp'
 
 
 <ChannelsScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: 16
-        spacing: 8
+        padding: dp(16)
+        spacing: dp(8)
 
         TitleLabel:
             text: '渠道管理'
             size_hint_y: None
-            height: 34
+            height: dp(40)
 
         ScrollView:
             BoxLayout:
                 id: channels_list
                 orientation: 'vertical'
-                spacing: 4
+                spacing: dp(6)
                 size_hint_y: None
                 height: self.minimum_height
 
         MyLabel:
             text: '后缀'
             size_hint_y: None
-            height: 18
+            height: dp(24)
         DTextInput:
             id: ch_suffix
             hint_text: '@example'
-            height: 48
 
         MyLabel:
             text: '显示名称'
             size_hint_y: None
-            height: 18
+            height: dp(24)
         DTextInput:
             id: ch_label
             hint_text: '显示名称'
-            height: 48
 
         BoxLayout:
             size_hint_y: None
-            height: 44
-            spacing: 8
+            height: dp(52)
+            spacing: dp(12)
             MyButton:
                 id: btn_save_ch
                 text: '保存'
@@ -492,8 +489,8 @@ KV = """
             id: ch_status
             text: ''
             size_hint_y: None
-            height: 20
-            font_size: '12sp'
+            height: dp(24)
+            font_size: '13sp'
 """
 
 Builder.load_string(KV)
@@ -533,7 +530,7 @@ class StatusScreen(Screen):
         btn = self.ids.btn_webui
         if info["mode"] == "local" and info.get("has_root") \
                 and info.get("module", {}).get("installed"):
-            btn.height = 44
+            btn.height = dp(48)
             btn.opacity = 1
         else:
             btn.height = 0
@@ -763,11 +760,11 @@ class AccountScreen(Screen):
         for i, acct in enumerate(self._accounts):
             btn = Button(
                 text=f"  {acct.get('username', '')}",
-                size_hint_y=None, height=44,
+                size_hint_y=None, height=dp(48),
                 background_normal='', background_down='',
                 background_color=(0.118, 0.161, 0.231, 1),
                 color=(0.8, 0.83, 0.88, 1),
-                font_name='Roboto', font_size='13sp',
+                font_name='Roboto', font_size='14sp',
                 halign='left', valign='middle')
             btn.bind(on_press=lambda inst, idx=i: self._select(idx))
             container.add_widget(btn)
@@ -856,11 +853,11 @@ class ChannelsScreen(Screen):
             display = f"{label}  ({suffix})" if suffix else f"{label}  (无后缀)"
             btn = Button(
                 text=f"  {display}",
-                size_hint_y=None, height=40,
+                size_hint_y=None, height=dp(44),
                 background_normal='', background_down='',
                 background_color=(0.118, 0.161, 0.231, 1),
                 color=(0.8, 0.83, 0.88, 1),
-                font_name='Roboto', font_size='13sp',
+                font_name='Roboto', font_size='14sp',
                 halign='left', valign='middle')
             btn.bind(on_press=lambda inst, s=suffix, l=label: self._select(s, l))
             container.add_widget(btn)
@@ -926,7 +923,7 @@ class DrComApp(App):
     def build(self):
         from kivy.utils import platform
         if platform != 'android':
-            Window.size = (400, 700)
+            Window.size = (dp(400), dp(720))
         Window.clearcolor = (0.06, 0.07, 0.11, 1)  # #0F1219
 
         self.backend = None
@@ -951,14 +948,14 @@ class DrComApp(App):
                 btn.background_color = ACTIVE if active else INACTIVE
                 btn.color = (1, 1, 1, 1) if active else (0.45, 0.50, 0.58, 1)
 
-        nav = BoxLayout(size_hint_y=None, height=48, spacing=2)
+        nav = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(2))
         for label, screen in [("状态", "status"), ("账号", "accounts"),
                               ("渠道", "channels"), ("配置", "config"),
                               ("关于", "about")]:
             btn = Button(text=label, size_hint=(1, 1), font_name='Roboto',
                          background_normal='', background_down='',
                          background_color=INACTIVE,
-                         color=(0.45, 0.50, 0.58, 1), bold=True, font_size='13sp')
+                         color=(0.45, 0.50, 0.58, 1), bold=True, font_size='14sp')
             btn.bind(on_press=lambda inst, s=screen: setattr(sm, "current", s))
             nav_btns[screen] = btn
             nav.add_widget(btn)
