@@ -149,6 +149,24 @@ class Backend:
         """打开模块 WebUI 面板。"""
         return False, "不支持"
 
+    def list_accounts(self) -> List[Dict]:
+        raise NotImplementedError
+
+    def save_account(self, username: str, password: str, overwrite: bool = False) -> Tuple[bool, str]:
+        raise NotImplementedError
+
+    def delete_account(self, index: int) -> Tuple[bool, str]:
+        raise NotImplementedError
+
+    def get_channels(self) -> Dict:
+        raise NotImplementedError
+
+    def save_channel(self, suffix: str, label: str) -> Tuple[bool, str]:
+        raise NotImplementedError
+
+    def delete_channel(self, suffix: str) -> Tuple[bool, str]:
+        raise NotImplementedError
+
 
 # ---------- LocalBackend（无 root / 桌面调试）----------
 
@@ -168,6 +186,8 @@ class LocalBackend(Backend):
         self._config_path = os.path.join(config_dir, "config.env")
         self._state_path = os.path.join(config_dir, "login_state.json")
         self._log_path = os.path.join(config_dir, "auth.log")
+        self._accounts_path = os.path.join(config_dir, "accounts.json")
+        self._channels_path = os.path.join(config_dir, "channels.json")
         self._task_id = 0
         self._task_result: Optional[Dict] = None
         self._task_lock = threading.Lock()
@@ -361,6 +381,89 @@ class LocalBackend(Backend):
         except OSError:
             pass
 
+    # --- 多账户管理 ---
+
+    def _read_json(self, path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _write_json(self, path, data):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return True
+        except OSError:
+            return False
+
+    def list_accounts(self) -> List[Dict]:
+        data = self._read_json(self._accounts_path)
+        return data if isinstance(data, list) else []
+
+    def save_account(self, username, password, overwrite=False):
+        if not username:
+            return False, "用户名不能为空"
+        accounts = self.list_accounts()
+        for i, a in enumerate(accounts):
+            if a.get("username") == username:
+                if not overwrite:
+                    return False, "账号已存在"
+                accounts[i] = {"username": username, "password": password}
+                self._write_json(self._accounts_path, accounts)
+                return True, "覆盖成功"
+        accounts.append({"username": username, "password": password})
+        self._write_json(self._accounts_path, accounts)
+        return True, "保存成功"
+
+    def delete_account(self, index):
+        accounts = self.list_accounts()
+        if not (0 <= index < len(accounts)):
+            return False, "索引无效"
+        accounts.pop(index)
+        self._write_json(self._accounts_path, accounts)
+        return True, "删除成功"
+
+    # --- 渠道管理 ---
+
+    DEFAULT_CHANNELS = {
+        "@cmcc": "中国移动", "@unicom": "中国联通",
+        "@telecom": "中国电信", "@glgd": "中国广电", "": "校园网",
+    }
+
+    def get_channels(self) -> Dict:
+        data = self._read_json(self._channels_path)
+        if not isinstance(data, dict) or not data:
+            defaults = dict(self.DEFAULT_CHANNELS)
+            self._write_json(self._channels_path, defaults)
+            return defaults
+        merged = dict(self.DEFAULT_CHANNELS)
+        merged.update(data)
+        if set(merged.items()) != set(data.items()):
+            self._write_json(self._channels_path, merged)
+        return merged
+
+    def save_channel(self, suffix, label):
+        if not suffix:
+            return False, "后缀不能为空"
+        if suffix in self.DEFAULT_CHANNELS:
+            return False, "内置渠道不可修改"
+        channels = self.get_channels()
+        channels[suffix] = label
+        self._write_json(self._channels_path, channels)
+        return True, "保存成功"
+
+    def delete_channel(self, suffix):
+        if suffix in self.DEFAULT_CHANNELS:
+            return False, "内置渠道不可删除"
+        channels = self.get_channels()
+        if suffix not in channels:
+            return False, "渠道不存在"
+        del channels[suffix]
+        self._write_json(self._channels_path, channels)
+        return True, "删除成功"
+
 
 # ---------- ModuleBackend（root + 模块已装）----------
 
@@ -502,6 +605,59 @@ class ModuleBackend(Backend):
         except Exception:
             webbrowser.open(url)
         return True, url
+
+    # --- 多账户管理（通过 WebUI API）---
+
+    def list_accounts(self) -> List[Dict]:
+        try:
+            return requests.get(f"{self._base}/api/accounts", timeout=3).json()
+        except Exception:
+            return []
+
+    def save_account(self, username, password, overwrite=False):
+        try:
+            r = requests.post(f"{self._base}/api/save_account", timeout=3, data={
+                "username": username, "password": password,
+                "overwrite": str(overwrite).lower()})
+            d = r.json()
+            return d.get("ok", False), d.get("error", "")
+        except Exception as e:
+            return False, str(e)
+
+    def delete_account(self, index):
+        try:
+            r = requests.post(f"{self._base}/api/delete_account", timeout=3,
+                              data={"index": str(index)})
+            d = r.json()
+            return d.get("ok", False), d.get("error", "")
+        except Exception as e:
+            return False, str(e)
+
+    # --- 渠道管理（通过 WebUI API）---
+
+    def get_channels(self) -> Dict:
+        try:
+            return requests.get(f"{self._base}/api/channels", timeout=3).json()
+        except Exception:
+            return {}
+
+    def save_channel(self, suffix, label):
+        try:
+            r = requests.post(f"{self._base}/api/save_channel", timeout=3,
+                              data={"suffix": suffix, "label": label})
+            d = r.json()
+            return d.get("ok", False), d.get("error", "")
+        except Exception as e:
+            return False, str(e)
+
+    def delete_channel(self, suffix):
+        try:
+            r = requests.post(f"{self._base}/api/delete_channel", timeout=3,
+                              data={"suffix": suffix})
+            d = r.json()
+            return d.get("ok", False), d.get("error", "")
+        except Exception as e:
+            return False, str(e)
 
 
 # ---------- 工厂函数 ----------

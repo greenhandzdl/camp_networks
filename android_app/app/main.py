@@ -373,6 +373,127 @@ KV = """
             background_color: rgba('#059669')
             on_press: root.check_update()
             on_release: self.background_color = rgba('#059669')
+
+
+<AccountScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 16
+        spacing: 8
+
+        TitleLabel:
+            text: '账号管理'
+            size_hint_y: None
+            height: 34
+
+        ScrollView:
+            BoxLayout:
+                id: accounts_list
+                orientation: 'vertical'
+                spacing: 4
+                size_hint_y: None
+                height: self.minimum_height
+
+        MyLabel:
+            text: '用户名'
+            size_hint_y: None
+            height: 18
+        DTextInput:
+            id: acct_username
+            hint_text: '用户名'
+            height: 48
+
+        MyLabel:
+            text: '密码'
+            size_hint_y: None
+            height: 18
+        DTextInput:
+            id: acct_password
+            hint_text: '密码'
+            password: True
+            height: 48
+
+        BoxLayout:
+            size_hint_y: None
+            height: 44
+            spacing: 8
+            MyButton:
+                id: btn_save_acct
+                text: '保存'
+                on_press: root.save_account()
+            MyButton:
+                id: btn_del_acct
+                text: '删除'
+                background_color: rgba('#DC2626')
+                on_press: root.delete_account()
+                on_release: self.background_color = rgba('#DC2626')
+
+        MyLabel:
+            id: acct_status
+            text: ''
+            size_hint_y: None
+            height: 20
+            font_size: '12sp'
+
+
+<ChannelsScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 16
+        spacing: 8
+
+        TitleLabel:
+            text: '渠道管理'
+            size_hint_y: None
+            height: 34
+
+        ScrollView:
+            BoxLayout:
+                id: channels_list
+                orientation: 'vertical'
+                spacing: 4
+                size_hint_y: None
+                height: self.minimum_height
+
+        MyLabel:
+            text: '后缀'
+            size_hint_y: None
+            height: 18
+        DTextInput:
+            id: ch_suffix
+            hint_text: '@example'
+            height: 48
+
+        MyLabel:
+            text: '显示名称'
+            size_hint_y: None
+            height: 18
+        DTextInput:
+            id: ch_label
+            hint_text: '显示名称'
+            height: 48
+
+        BoxLayout:
+            size_hint_y: None
+            height: 44
+            spacing: 8
+            MyButton:
+                id: btn_save_ch
+                text: '保存'
+                on_press: root.save_channel()
+            MyButton:
+                id: btn_del_ch
+                text: '删除'
+                background_color: rgba('#DC2626')
+                on_press: root.delete_channel()
+                on_release: self.background_color = rgba('#DC2626')
+
+        MyLabel:
+            id: ch_status
+            text: ''
+            size_hint_y: None
+            height: 20
+            font_size: '12sp'
 """
 
 Builder.load_string(KV)
@@ -619,6 +740,186 @@ class AboutScreen(Screen):
         Clock.schedule_once(lambda dt: setattr(self.ids.update_label, 'text', msg))
 
 
+class AccountScreen(Screen):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._accounts = []
+        self._selected_index = None
+
+    def on_enter(self, *args):
+        app = App.get_running_app()
+        if app and app.backend:
+            threading.Thread(target=self._load_bg, daemon=True).start()
+
+    def _load_bg(self):
+        accounts = App.get_running_app().backend.list_accounts()
+        Clock.schedule_once(lambda dt: self._fill(accounts))
+
+    def _fill(self, accounts):
+        self._accounts = accounts or []
+        container = self.ids.accounts_list
+        container.clear_widgets()
+        for i, acct in enumerate(self._accounts):
+            btn = Button(
+                text=f"  {acct.get('username', '')}",
+                size_hint_y=None, height=44,
+                background_normal='', background_down='',
+                background_color=(0.118, 0.161, 0.231, 1),
+                color=(0.8, 0.83, 0.88, 1),
+                font_name='Roboto', font_size='13sp',
+                halign='left', valign='middle')
+            btn.bind(on_press=lambda inst, idx=i: self._select(idx))
+            container.add_widget(btn)
+
+    def _select(self, index):
+        if 0 <= index < len(self._accounts):
+            acct = self._accounts[index]
+            self.ids.acct_username.text = acct.get('username', '')
+            self.ids.acct_password.text = acct.get('password', '')
+            self._selected_index = index
+            self.ids.acct_status.text = f'已选择: {acct.get("username", "")}'
+            self.ids.acct_status.color = (0.145, 0.388, 0.922, 1)
+
+    def save_account(self):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        username = self.ids.acct_username.text.strip()
+        password = self.ids.acct_password.text
+        if not username:
+            self.ids.acct_status.text = '用户名不能为空'
+            self.ids.acct_status.color = (0.86, 0.15, 0.15, 1)
+            return
+        overwrite = self._selected_index is not None
+        threading.Thread(target=self._save_bg,
+                         args=(username, password, overwrite),
+                         daemon=True).start()
+
+    def _save_bg(self, username, password, overwrite):
+        ok, msg = App.get_running_app().backend.save_account(
+            username, password, overwrite)
+        Clock.schedule_once(lambda dt: self._save_done(ok, msg))
+
+    def _save_done(self, ok, msg):
+        self.ids.acct_status.text = msg
+        self.ids.acct_status.color = (0.06, 0.72, 0.51, 1) if ok else (0.86, 0.15, 0.15, 1)
+        self._selected_index = None
+        if ok:
+            self.on_enter()
+
+    def delete_account(self):
+        if self._selected_index is None:
+            self.ids.acct_status.text = '请先选择一个账号'
+            self.ids.acct_status.color = (0.86, 0.15, 0.15, 1)
+            return
+        self.ids.btn_del_acct.disabled = True
+        threading.Thread(target=self._del_bg,
+                         args=(self._selected_index,),
+                         daemon=True).start()
+
+    def _del_bg(self, index):
+        ok, msg = App.get_running_app().backend.delete_account(index)
+        Clock.schedule_once(lambda dt: self._del_done(ok, msg))
+
+    def _del_done(self, ok, msg):
+        self.ids.btn_del_acct.disabled = False
+        self.ids.acct_status.text = msg
+        self.ids.acct_status.color = (0.06, 0.72, 0.51, 1) if ok else (0.86, 0.15, 0.15, 1)
+        self._selected_index = None
+        self.ids.acct_username.text = ''
+        self.ids.acct_password.text = ''
+        if ok:
+            self.on_enter()
+
+
+class ChannelsScreen(Screen):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._channels = {}
+
+    def on_enter(self, *args):
+        app = App.get_running_app()
+        if app and app.backend:
+            threading.Thread(target=self._load_bg, daemon=True).start()
+
+    def _load_bg(self):
+        channels = App.get_running_app().backend.get_channels()
+        Clock.schedule_once(lambda dt: self._fill(channels))
+
+    def _fill(self, channels):
+        self._channels = channels or {}
+        container = self.ids.channels_list
+        container.clear_widgets()
+        for suffix, label in self._channels.items():
+            display = f"{label}  ({suffix})" if suffix else f"{label}  (无后缀)"
+            btn = Button(
+                text=f"  {display}",
+                size_hint_y=None, height=40,
+                background_normal='', background_down='',
+                background_color=(0.118, 0.161, 0.231, 1),
+                color=(0.8, 0.83, 0.88, 1),
+                font_name='Roboto', font_size='13sp',
+                halign='left', valign='middle')
+            btn.bind(on_press=lambda inst, s=suffix, l=label: self._select(s, l))
+            container.add_widget(btn)
+
+    def _select(self, suffix, label):
+        self.ids.ch_suffix.text = suffix
+        self.ids.ch_label.text = label
+        self.ids.ch_status.text = f'已选择: {label}'
+        self.ids.ch_status.color = (0.145, 0.388, 0.922, 1)
+
+    def save_channel(self):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        suffix = self.ids.ch_suffix.text.strip()
+        label = self.ids.ch_label.text.strip()
+        if not suffix or not label:
+            self.ids.ch_status.text = '后缀和名称不能为空'
+            self.ids.ch_status.color = (0.86, 0.15, 0.15, 1)
+            return
+        threading.Thread(target=self._save_bg,
+                         args=(suffix, label), daemon=True).start()
+
+    def _save_bg(self, suffix, label):
+        ok, msg = App.get_running_app().backend.save_channel(suffix, label)
+        Clock.schedule_once(lambda dt: self._save_done(ok, msg))
+
+    def _save_done(self, ok, msg):
+        self.ids.ch_status.text = msg
+        self.ids.ch_status.color = (0.06, 0.72, 0.51, 1) if ok else (0.86, 0.15, 0.15, 1)
+        if ok:
+            self.ids.ch_suffix.text = ''
+            self.ids.ch_label.text = ''
+            self.on_enter()
+
+    def delete_channel(self):
+        suffix = self.ids.ch_suffix.text.strip()
+        if not suffix:
+            self.ids.ch_status.text = '请输入要删除的后缀'
+            self.ids.ch_status.color = (0.86, 0.15, 0.15, 1)
+            return
+        self.ids.btn_del_ch.disabled = True
+        threading.Thread(target=self._del_bg, args=(suffix,),
+                         daemon=True).start()
+
+    def _del_bg(self, suffix):
+        ok, msg = App.get_running_app().backend.delete_channel(suffix)
+        Clock.schedule_once(lambda dt: self._del_done(ok, msg))
+
+    def _del_done(self, ok, msg):
+        self.ids.btn_del_ch.disabled = False
+        self.ids.ch_status.text = msg
+        self.ids.ch_status.color = (0.06, 0.72, 0.51, 1) if ok else (0.86, 0.15, 0.15, 1)
+        if ok:
+            self.ids.ch_suffix.text = ''
+            self.ids.ch_label.text = ''
+            self.on_enter()
+
+
 class DrComApp(App):
     title = "Dr.COM WLAN"
 
@@ -631,6 +932,8 @@ class DrComApp(App):
         self.backend = None
         sm = ScreenManager()
         sm.add_widget(StatusScreen(name="status"))
+        sm.add_widget(AccountScreen(name="accounts"))
+        sm.add_widget(ChannelsScreen(name="channels"))
         sm.add_widget(ConfigScreen(name="config"))
         sm.add_widget(AboutScreen(name="about"))
 
@@ -649,7 +952,9 @@ class DrComApp(App):
                 btn.color = (1, 1, 1, 1) if active else (0.45, 0.50, 0.58, 1)
 
         nav = BoxLayout(size_hint_y=None, height=48, spacing=2)
-        for label, screen in [("状态", "status"), ("配置", "config"), ("关于", "about")]:
+        for label, screen in [("状态", "status"), ("账号", "accounts"),
+                              ("渠道", "channels"), ("配置", "config"),
+                              ("关于", "about")]:
             btn = Button(text=label, size_hint=(1, 1), font_name='Roboto',
                          background_normal='', background_down='',
                          background_color=INACTIVE,
