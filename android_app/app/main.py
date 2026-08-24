@@ -20,6 +20,7 @@ from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.spinner import Spinner
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
@@ -136,6 +137,15 @@ KV = """
     text: '关'
     on_state: self.text = '开' if self.state == 'down' else '关'; self.background_color = rgba('#2563EB') if self.state == 'down' else rgba('#475569')
 
+<DSpinner@Spinner>:
+    background_normal: ''
+    background_down: ''
+    background_color: rgba('#1E293B')
+    color: rgba('#E2E8F0')
+    font_name: 'Roboto'
+    font_size: '14sp'
+    option_cls: 'MyLabel'
+
 
 <StatusScreen>:
     BoxLayout:
@@ -209,7 +219,7 @@ KV = """
         spacing: dp(8)
 
         TitleLabel:
-            text: '配置'
+            text: '认证'
             size_hint_y: None
             height: dp(40)
 
@@ -220,6 +230,16 @@ KV = """
                 padding: [0, dp(2), 0, dp(4)]
                 size_hint_y: None
                 height: self.minimum_height
+
+                SectionHeader:
+                    text: '已保存账号'
+                DSpinner:
+                    id: acct_spinner
+                    text: '选择已保存账号'
+                    values: []
+                    size_hint_y: None
+                    height: dp(48)
+                    on_text: root._on_account_select(self.text)
 
                 SectionHeader:
                     text: '账号设置'
@@ -238,9 +258,6 @@ KV = """
                     id: password
                     hint_text: '请输入密码'
                     password: True
-
-                SectionHeader:
-                    text: '网络设置'
                 MyLabel:
                     text: '运营商后缀'
                     size_hint_y: None
@@ -249,6 +266,32 @@ KV = """
                     id: suffix
                     hint_text: '@cmcc'
                     text: '@cmcc'
+
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(52)
+                    spacing: dp(12)
+                    MyButton:
+                        id: btn_cfg_login
+                        text: '  登录  '
+                        on_press: root.do_login()
+                    MyButton:
+                        id: btn_cfg_logout
+                        text: '  登出  '
+                        background_color: rgba('#DC2626')
+                        on_press: root.do_logout()
+                        on_release: self.background_color = rgba('#DC2626')
+
+                ScrollView:
+                    size_hint_y: None
+                    height: dp(120)
+                    OutputLabel:
+                        id: auth_output
+                        text: ''
+
+                SectionHeader:
+                    text: '网络设置'
                 MyLabel:
                     text: '认证服务器'
                     size_hint_y: None
@@ -611,6 +654,12 @@ class StatusScreen(Screen):
 
 class ConfigScreen(Screen):
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._accounts = []
+        self._task_id = None
+        self._poll_event = None
+
     def on_enter(self, *args):
         app = App.get_running_app()
         if not app or not app.backend:
@@ -618,20 +667,102 @@ class ConfigScreen(Screen):
         threading.Thread(target=self._load_bg, daemon=True).start()
 
     def _load_bg(self):
-        cfg = App.get_running_app().backend.load_config()
-        Clock.schedule_once(lambda dt: self._fill(cfg))
+        app = App.get_running_app()
+        cfg = app.backend.load_config()
+        accounts = app.backend.list_accounts()
+        Clock.schedule_once(lambda dt: self._fill(cfg, accounts))
 
-    def _fill(self, cfg):
-        if not cfg:
+    def _fill(self, cfg, accounts):
+        if cfg:
+            self.ids.username.text = cfg.username
+            self.ids.password.text = cfg.password
+            self.ids.suffix.text = cfg.suffix
+            self.ids.auth_server.text = cfg.auth_server
+            self.ids.redirect_server.text = cfg.redirect_server
+            self.ids.debug_switch.state = 'down' if cfg.debug else 'normal'
+            self.ids.auto_run.state = 'down' if getattr(cfg, 'auto_run', False) else 'normal'
+            self.ids.target_essid.text = getattr(cfg, 'target_essid', '') or ''
+        self._accounts = accounts or []
+        if self._accounts:
+            names = ['选择已保存账号'] + [a.get('username', '') for a in self._accounts]
+            self.ids.acct_spinner.values = names
+
+    def _on_account_select(self, text):
+        if text == '选择已保存账号' or not text:
             return
-        self.ids.username.text = cfg.username
-        self.ids.password.text = cfg.password
-        self.ids.suffix.text = cfg.suffix
-        self.ids.auth_server.text = cfg.auth_server
-        self.ids.redirect_server.text = cfg.redirect_server
-        self.ids.debug_switch.state = 'down' if cfg.debug else 'normal'
-        self.ids.auto_run.state = 'down' if getattr(cfg, 'auto_run', False) else 'normal'
-        self.ids.target_essid.text = getattr(cfg, 'target_essid', '') or ''
+        for acct in self._accounts:
+            if acct.get('username') == text:
+                self.ids.username.text = acct.get('username', '')
+                self.ids.password.text = acct.get('password', '')
+                break
+
+    # --- 登录/登出 ---
+
+    def do_login(self):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        self.ids.btn_cfg_login.disabled = True
+        self.ids.auth_output.text = '正在登录...\n'
+        threading.Thread(target=self._do_login_bg, daemon=True).start()
+
+    def _do_login_bg(self):
+        app = App.get_running_app()
+        tid, err = app.backend.login_async()
+        if err:
+            Clock.schedule_once(lambda dt: self._login_done(False, err))
+            return
+        self._task_id = tid
+        self._poll_event = Clock.schedule_interval(self._poll_login, 0.5)
+
+    def _poll_login(self, dt):
+        app = App.get_running_app()
+        if self._task_id is None:
+            return False
+        result = app.backend.get_login_result(self._task_id)
+        if result is None:
+            return True
+        if self._poll_event:
+            self._poll_event.cancel()
+            self._poll_event = None
+        Clock.schedule_once(lambda dt: self._login_done(
+            result.get('ok', False), result.get('output', '')))
+        return False
+
+    def _login_done(self, ok, output):
+        self.ids.btn_cfg_login.disabled = False
+        self.ids.auth_output.text = output + f"\n\n{'认证成功' if ok else '认证失败'}"
+        if ok:
+            self._refresh_status()
+
+    def do_logout(self):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        self.ids.btn_cfg_logout.disabled = True
+        self.ids.auth_output.text = '正在登出...\n'
+        threading.Thread(target=self._do_logout_bg, daemon=True).start()
+
+    def _do_logout_bg(self):
+        ok, msg = App.get_running_app().backend.logout()
+        Clock.schedule_once(lambda dt: self._logout_done(ok, msg))
+
+    def _logout_done(self, ok, msg):
+        self.ids.btn_cfg_logout.disabled = False
+        self.ids.auth_output.text = msg + f"\n\n{'登出成功' if ok else '登出失败'}"
+        self._refresh_status()
+
+    def _refresh_status(self):
+        app = App.get_running_app()
+        if app and app.root:
+            for child in app.root.children:
+                if isinstance(child, ScreenManager):
+                    for screen in child.screens:
+                        if screen.name == 'status':
+                            screen.refresh_env()
+                    break
+
+    # --- 保存配置 ---
 
     def save(self):
         app = App.get_running_app()
