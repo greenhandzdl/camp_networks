@@ -167,6 +167,9 @@ class Backend:
     def delete_channel(self, suffix: str) -> Tuple[bool, str]:
         raise NotImplementedError
 
+    def modify_channel(self, suffix: str, label: str) -> Tuple[bool, str]:
+        raise NotImplementedError
+
 
 # ---------- LocalBackend（无 root / 桌面调试）----------
 
@@ -464,6 +467,18 @@ class LocalBackend(Backend):
         self._write_json(self._channels_path, channels)
         return True, "删除成功"
 
+    def modify_channel(self, suffix, label):
+        if suffix in self.DEFAULT_CHANNELS:
+            return False, "内置渠道不可修改"
+        if not label:
+            return False, "名称不能为空"
+        channels = self.get_channels()
+        if suffix not in channels:
+            return False, "渠道不存在"
+        channels[suffix] = label
+        self._write_json(self._channels_path, channels)
+        return True, "修改成功"
+
 
 # ---------- ModuleBackend（root + 模块已装）----------
 
@@ -654,6 +669,15 @@ class ModuleBackend(Backend):
         try:
             r = requests.post(f"{self._base}/api/delete_channel", timeout=3,
                               data={"suffix": suffix})
+            d = r.json()
+            return d.get("ok", False), d.get("error", "")
+        except Exception as e:
+            return False, str(e)
+
+    def modify_channel(self, suffix, label):
+        try:
+            r = requests.post(f"{self._base}/api/modify_channel", timeout=3,
+                              data={"suffix": suffix, "label": label})
             d = r.json()
             return d.get("ok", False), d.get("error", "")
         except Exception as e:

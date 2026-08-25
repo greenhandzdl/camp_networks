@@ -584,11 +584,22 @@ KV = """
                         hint_text: '显示名'
                         size_hint_x: 0.6
                 MyButton:
+                    id: ch_btn
                     text: '添加渠道'
                     size_hint_y: None
                     height: dp(40)
                     background_color: rgba('#2A2A3A')
                     on_press: root.save_channel()
+                    on_release: self.background_color = rgba('#2A2A3A')
+                MyButton:
+                    id: ch_cancel_btn
+                    text: '取消编辑'
+                    size_hint_y: None
+                    height: dp(36)
+                    opacity: 0
+                    disabled: True
+                    background_color: rgba('#2A2A3A')
+                    on_press: root._cancel_ch_edit()
                     on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     id: ch_status
@@ -1015,6 +1026,7 @@ class SettingsScreen(Screen):
         self._accounts = []
         self._selected_acct_idx = None
         self._channels = {}
+        self._edit_ch_suffix = None
 
     def on_enter(self, *args):
         app = App.get_running_app()
@@ -1087,6 +1099,15 @@ class SettingsScreen(Screen):
                     font_size='11sp')
                 row.add_widget(tag)
             else:
+                # 自定义渠道：点击选中编辑
+                edit_btn = Button(
+                    text='编辑', size_hint_x=None, width=dp(48),
+                    background_normal='', background_down='',
+                    background_color=(0.165, 0.165, 0.227, 1),
+                    color=(0.42, 0.36, 0.91, 1),
+                    font_name='Roboto', font_size='12sp')
+                edit_btn.bind(on_press=lambda inst, s=suffix, l=label: self._select_channel(s, l))
+                row.add_widget(edit_btn)
                 del_btn = Button(
                     text='删除', size_hint_x=None, width=dp(56),
                     background_normal='', background_down='',
@@ -1187,6 +1208,29 @@ class SettingsScreen(Screen):
 
     # --- 渠道管理 ---
 
+    def _select_channel(self, suffix, label):
+        """选中自定义渠道进入编辑模式"""
+        self._edit_ch_suffix = suffix
+        self.ids.ch_suffix.text = suffix
+        self.ids.ch_suffix.readonly = True
+        self.ids.ch_label.text = label
+        self.ids.ch_btn.text = '修改渠道'
+        self.ids.ch_cancel_btn.opacity = 1
+        self.ids.ch_cancel_btn.disabled = False
+        self.ids.ch_status.text = f'编辑模式: {label}'
+        self.ids.ch_status.color = rgba('#A29BFE')
+
+    def _cancel_ch_edit(self):
+        """取消编辑，回到新增模式"""
+        self._edit_ch_suffix = None
+        self.ids.ch_suffix.text = ''
+        self.ids.ch_suffix.readonly = False
+        self.ids.ch_label.text = ''
+        self.ids.ch_btn.text = '添加渠道'
+        self.ids.ch_cancel_btn.opacity = 0
+        self.ids.ch_cancel_btn.disabled = True
+        self.ids.ch_status.text = ''
+
     def save_channel(self):
         app = App.get_running_app()
         if not app or not app.backend:
@@ -1197,8 +1241,17 @@ class SettingsScreen(Screen):
             self.ids.ch_status.text = '后缀和名称不能为空'
             self.ids.ch_status.color = rgba('#E17055')
             return
-        threading.Thread(target=self._save_ch_bg,
-                         args=(suffix, label), daemon=True).start()
+        is_edit = self._edit_ch_suffix is not None
+        if is_edit:
+            threading.Thread(target=self._modify_ch_bg,
+                             args=(self._edit_ch_suffix, label), daemon=True).start()
+        else:
+            threading.Thread(target=self._save_ch_bg,
+                             args=(suffix, label), daemon=True).start()
+
+    def _modify_ch_bg(self, suffix, label):
+        ok, msg = App.get_running_app().backend.modify_channel(suffix, label)
+        Clock.schedule_once(lambda dt: self._save_ch_done(ok, msg))
 
     def _save_ch_bg(self, suffix, label):
         ok, msg = App.get_running_app().backend.save_channel(suffix, label)
@@ -1207,9 +1260,8 @@ class SettingsScreen(Screen):
     def _save_ch_done(self, ok, msg):
         self.ids.ch_status.text = msg
         self.ids.ch_status.color = rgba('#00B894') if ok else rgba('#E17055')
+        self._cancel_ch_edit()
         if ok:
-            self.ids.ch_suffix.text = ''
-            self.ids.ch_label.text = ''
             self.on_enter()
 
     def delete_channel(self, suffix):
