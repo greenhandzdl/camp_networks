@@ -183,19 +183,25 @@ KV = """
                     id: env_info
                     text: '环境检测中...'
                     color: rgba('#8888A0')
-                BoxLayout:
-                    orientation: 'horizontal'
+                MyLabel:
+                    id: ssid_label
+                    text: 'WiFi: --'
+                    color: rgba('#8888A0')
                     size_hint_y: None
-                    height: dp(24)
-                    spacing: dp(16)
-                    MyLabel:
-                        id: ssid_label
-                        text: 'WiFi: --'
-                        color: rgba('#8888A0')
-                    MyLabel:
-                        id: ip_label
-                        text: 'IP: --'
-                        color: rgba('#8888A0')
+                    height: dp(22)
+                MyLabel:
+                    id: ip_label
+                    text: 'IPv4: --'
+                    color: rgba('#8888A0')
+                    size_hint_y: None
+                    height: dp(22)
+                MyLabel:
+                    id: ipv6_label
+                    text: 'IPv6: --'
+                    color: rgba('#8888A0')
+                    font_size: '11sp'
+                    size_hint_y: None
+                    height: dp(20)
                 MyLabel:
                     id: mod_info
                     text: ''
@@ -203,15 +209,39 @@ KV = """
                     font_size: '12sp'
                     size_hint_y: None
                     height: dp(20)
-                MyButton:
-                    id: btn_webui
-                    text: '打开 WebUI 面板'
+                BoxLayout:
+                    orientation: 'horizontal'
                     size_hint_y: None
-                    height: 0
-                    opacity: 0
-                    background_color: rgba('#00B894')
-                    on_press: root.open_webui()
-                    on_release: self.background_color = rgba('#00B894')
+                    height: dp(40)
+                    spacing: dp(8)
+                    MyButton:
+                        text: '刷新网络'
+                        font_size: '13sp'
+                        background_color: rgba('#2A2A3A')
+                        on_press: root.refresh_env()
+                        on_release: self.background_color = rgba('#2A2A3A')
+                    MyButton:
+                        id: btn_webui
+                        text: '打开 WebUI'
+                        font_size: '13sp'
+                        size_hint_x: 0
+                        opacity: 0
+                        background_color: rgba('#00B894')
+                        on_press: root.open_webui()
+                        on_release: self.background_color = rgba('#00B894')
+
+            Card:
+                TitleLabel:
+                    text: '自动认证状态'
+                MyLabel:
+                    id: auto_status
+                    text: '加载中...'
+                    color: rgba('#8888A0')
+                    size_hint_y: None
+                    height: dp(40)
+                    text_size: self.width, None
+                    halign: 'left'
+                    valign: 'top'
 
             Card:
                 TitleLabel:
@@ -232,7 +262,7 @@ KV = """
                         text: '立即认证'
                         background_color: rgba('#00B894')
                         on_press: root.do_login()
-                        on_release: self.background_color = rgba('#00B894')
+                        on_release: self.background_color = rgba('#00B894') if not root._task_running else rgba('#E17055')
                     MyButton:
                         id: btn_logout
                         text: '登出'
@@ -254,7 +284,7 @@ KV = """
                     height: dp(100)
                     OutputLabel:
                         id: log_output
-                        text: '点击"查看日志"加载'
+                        text: '点击“查看日志”加载'
                 BoxLayout:
                     orientation: 'horizontal'
                     size_hint_y: None
@@ -283,12 +313,29 @@ KV = """
                     size_hint_y: None
                     height: dp(24)
                 MyButton:
+                    id: btn_check_update
                     text: '检查更新'
                     size_hint_y: None
                     height: dp(44)
                     background_color: rgba('#2A2A3A')
                     on_press: root.check_update()
                     on_release: self.background_color = rgba('#2A2A3A')
+                MyLabel:
+                    id: update_info
+                    text: ''
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
+                    size_hint_y: None
+                    height: dp(20)
+                MyButton:
+                    id: btn_download
+                    text: '下载并安装更新'
+                    size_hint_y: None
+                    height: 0
+                    opacity: 0
+                    background_color: rgba('#E17055')
+                    on_press: root.do_update()
+                    on_release: self.background_color = rgba('#E17055')
 
 
 <AuthScreen>:
@@ -358,7 +405,7 @@ KV = """
                         text: '立即认证'
                         background_color: rgba('#00B894')
                         on_press: root.do_login()
-                        on_release: self.background_color = rgba('#00B894')
+                        on_release: self.background_color = rgba('#00B894') if not root._task_running else rgba('#E17055')
                     MyButton:
                         id: btn_logout
                         text: '登出'
@@ -398,6 +445,12 @@ KV = """
                         background_color: rgba('#2A2A3A')
                         on_press: root.delete_account()
                         on_release: self.background_color = rgba('#2A2A3A')
+                    MyButton:
+                        text: '还原'
+                        font_size: '13sp'
+                        background_color: rgba('#2A2A3A')
+                        on_press: root.restore_account()
+                        on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     id: acct_status
                     text: ''
@@ -434,9 +487,43 @@ KV = """
                     height: dp(20)
                     color: rgba('#8888A0')
                     font_size: '12sp'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(48)
+                    spacing: dp(6)
+                    DTextInput:
+                        id: target_essid
+                        hint_text: '留空则对所有 WiFi 生效'
+                        size_hint_x: 1
+                    MyButton:
+                        text: '获取当前'
+                        size_hint_x: None
+                        width: dp(80)
+                        font_size: '12sp'
+                        background_color: rgba('#2A2A3A')
+                        on_press: root.fill_essid()
+                        on_release: self.background_color = rgba('#2A2A3A')
+                MyLabel:
+                    text: '运行间隔（分钟）'
+                    size_hint_y: None
+                    height: dp(20)
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
                 DTextInput:
-                    id: target_essid
-                    hint_text: '留空则对所有 WiFi 生效'
+                    id: auto_interval
+                    hint_text: '5'
+                    input_filter: 'int'
+                MyLabel:
+                    text: '接入后首次延迟（秒）'
+                    size_hint_y: None
+                    height: dp(20)
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
+                DTextInput:
+                    id: auto_delay
+                    hint_text: '5'
+                    input_filter: 'int'
                 MyButton:
                     text: '保存自动设置'
                     size_hint_y: None
@@ -470,7 +557,17 @@ KV = """
 
             Card:
                 TitleLabel:
-                    text: '网络设置'
+                    text: '服务设置'
+                MyLabel:
+                    text: 'WebUI 端口'
+                    size_hint_y: None
+                    height: dp(20)
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
+                DTextInput:
+                    id: port_input
+                    hint_text: '38080'
+                    input_filter: 'int'
                 MyLabel:
                     text: '认证服务器 IP'
                     size_hint_y: None
@@ -491,6 +588,34 @@ KV = """
                     id: redirect_server
                     hint_text: '1.2.3.4'
                     text: '1.2.3.4'
+                MyLabel:
+                    text: '日志文件路径'
+                    size_hint_y: None
+                    height: dp(20)
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
+                DTextInput:
+                    id: log_file_input
+                    hint_text: '/data/local/tmp/drcom_webui.log'
+                MyLabel:
+                    text: '更新包下载目录'
+                    size_hint_y: None
+                    height: dp(20)
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
+                DTextInput:
+                    id: download_dir_input
+                    hint_text: '/sdcard/Download'
+                MyLabel:
+                    text: '更新渠道'
+                    size_hint_y: None
+                    height: dp(20)
+                    color: rgba('#8888A0')
+                    font_size: '12sp'
+                DSpinner:
+                    id: update_channel_spinner
+                    text: 'GitHub'
+                    values: ['GitHub', 'CDN']
                 BoxLayout:
                     orientation: 'horizontal'
                     size_hint_y: None
@@ -500,8 +625,17 @@ KV = """
                         size_hint_x: 1
                     DSwitch:
                         id: debug_switch
+                BoxLayout:
+                    orientation: 'horizontal'
+                    size_hint_y: None
+                    height: dp(40)
+                    MyLabel:
+                        text: '开机自动打开面板'
+                        size_hint_x: 1
+                    DSwitch:
+                        id: auto_open_webui_switch
                 MyButton:
-                    text: '保存网络设置'
+                    text: '保存服务设置'
                     size_hint_y: None
                     height: dp(48)
                     on_press: root.save_network()
@@ -618,14 +752,26 @@ Builder.load_string(KV)
 class StatusScreen(Screen):
 
     version = __version__
+    _task_running = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._task_id = None
         self._poll_event = None
+        self._status_poll = None
 
     def on_enter(self, *args):
         self.refresh_env()
+        # 启动 2s 轮询运行状态
+        if self._status_poll:
+            self._status_poll.cancel()
+        self._status_poll = Clock.schedule_interval(self._poll_run_status, 2)
+        self._poll_run_status(0)
+
+    def on_leave(self, *args):
+        if self._status_poll:
+            self._status_poll.cancel()
+            self._status_poll = None
 
     def refresh_env(self):
         app = App.get_running_app()
@@ -639,36 +785,112 @@ class StatusScreen(Screen):
         wifi = app.backend.get_wifi_info()
         mode = "模块模式" if info["mode"] == "module" else "本地模式"
         ssid = wifi.get("ssid") or "--"
-        ip = wifi.get("ip") or "--"
+        bssid = wifi.get("bssid", "")
+        ipv4_list = wifi.get("ipv4") or [wifi.get("ip", "--")]
+        ipv6_list = wifi.get("ipv6") or []
+        ipv4_str = ", ".join(ipv4_list) if ipv4_list else "--"
+        ipv6_str = ", ".join(ipv6_list) if ipv6_list else "--"
         mod = info.get("module", {})
         mod_text = f"模块: {'已安装 ' + mod.get('version', '') if mod.get('installed') else '未安装'}"
         Clock.schedule_once(
-            lambda dt: self._update_ui(mode, ssid, ip, mod_text, info))
+            lambda dt: self._update_ui(mode, ssid, bssid, ipv4_str, ipv6_str,
+                                       mod_text, info))
 
-    def _update_ui(self, mode, ssid, ip, mod_text, info):
+    def _update_ui(self, mode, ssid, bssid, ipv4, ipv6, mod_text, info):
         self.ids.env_info.text = f"模式: {mode}"
-        self.ids.ssid_label.text = f"WiFi: {ssid}"
-        self.ids.ip_label.text = f"IP: {ip}"
+        self.ids.ssid_label.text = f"WiFi: {ssid}" + (f"  BSSID: {bssid}" if bssid else "")
+        self.ids.ip_label.text = f"IPv4: {ipv4}"
+        self.ids.ipv6_label.text = f"IPv6: {ipv6}"
         self.ids.mod_info.text = mod_text
         btn = self.ids.btn_webui
-        if info["mode"] == "local" and info.get("has_root") \
-                and info.get("module", {}).get("installed"):
-            btn.height = dp(44)
-            btn.opacity = 1
-        elif info["mode"] == "module":
-            btn.height = dp(44)
+        if info["mode"] == "module" or (info["mode"] == "local"
+                and info.get("has_root")
+                and info.get("module", {}).get("installed")):
+            btn.size_hint_x = 1
             btn.opacity = 1
         else:
-            btn.height = 0
+            btn.size_hint_x = 0
             btn.opacity = 0
+
+    # --- 运行状态轮询 ---
+
+    def _poll_run_status(self, dt):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return True
+        threading.Thread(target=self._poll_status_bg, daemon=True).start()
+
+    def _poll_status_bg(self):
+        try:
+            status = App.get_running_app().backend.get_run_status()
+            Clock.schedule_once(lambda dt: self._update_run_status(status))
+        except Exception:
+            pass
+
+    def _update_run_status(self, s):
+        running = s.get("running", False)
+        source = s.get("source")
+        auto_enabled = s.get("auto_enabled", False)
+        auto_connected = s.get("auto_connected", False)
+        has_schedule = s.get("has_schedule", False)
+        next_in = s.get("next_run_in", 0)
+        waiting_first = s.get("waiting_first", False)
+
+        self._task_running = running
+        btn = self.ids.btn_login
+        if running:
+            src_text = "(自动)" if source == "auto" else "(手动)"
+            btn.text = f"停止任务 {src_text}"
+            btn.background_color = rgba('#E17055')
+        else:
+            btn.text = "立即认证"
+            btn.background_color = rgba('#00B894')
+
+        # 自动认证状态文本
+        el = self.ids.auto_status
+        if not auto_enabled:
+            el.text = "自动认证未启用"
+            el.color = rgba('#555568')
+        elif running and source == "auto":
+            el.text = "正在执行自动认证..."
+            el.color = rgba('#A29BFE')
+        elif running and source == "manual":
+            el.text = "手动认证任务运行中"
+            el.color = rgba('#A29BFE')
+        elif auto_connected and has_schedule:
+            el.text = f"已连接目标 WiFi，{next_in} 秒后自动执行"
+            el.color = rgba('#00B894')
+        elif auto_connected:
+            el.text = "已连接目标 WiFi，即将执行认证..."
+            el.color = rgba('#00B894')
+        elif waiting_first:
+            el.text = "已连接目标 WiFi，等待首次执行..."
+            el.color = rgba('#FDCB6E')
+        else:
+            el.text = "未连接目标 WiFi，等待接入后自动触发"
+            el.color = rgba('#555568')
 
     def do_login(self):
         app = App.get_running_app()
         if not app or not app.backend:
             return
+        # 如果任务正在运行，执行停止
+        if self._task_running:
+            threading.Thread(target=self._stop_task_bg, daemon=True).start()
+            return
         self.ids.btn_login.disabled = True
         self.ids.output.text = "正在登录...\n"
         threading.Thread(target=self._do_login_bg, daemon=True).start()
+
+    def _stop_task_bg(self):
+        ok = App.get_running_app().backend.stop_login()
+        msg = "已终止认证任务" if ok else "停止失败"
+        Clock.schedule_once(lambda dt: self._stop_done(ok, msg))
+
+    def _stop_done(self, ok, msg):
+        self.ids.output.text = msg + "\n"
+        self.ids.auth_status.text = msg
+        self.ids.auth_status.color = rgba('#00B894') if ok else rgba('#E17055')
 
     def _do_login_bg(self):
         app = App.get_running_app()
@@ -750,25 +972,54 @@ class StatusScreen(Screen):
 
     def check_update(self):
         self.ids.update_label.text = '检查中...'
+        self.ids.btn_check_update.disabled = True
+        # 隐藏下载按钮
+        self.ids.btn_download.height = 0
+        self.ids.btn_download.opacity = 0
         threading.Thread(target=self._check_update_bg, daemon=True).start()
 
     def _check_update_bg(self):
-        try:
-            import requests
-            resp = requests.get(
-                "https://raw.githubusercontent.com/greenhandzdl/"
-                "camp_networks_magisk/main/update.json", timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            remote_code = int(data.get("versionCode", 0))
-            if remote_code > __version_code__:
-                msg = f"有新版本: {data.get('version', '')} (当前 {__version__})"
-            else:
-                msg = f"已是最新 ({__version__})"
-        except Exception as e:
-            msg = f"检查失败: {e}"
-        Clock.schedule_once(lambda dt: setattr(
-            self.ids.update_label, 'text', msg))
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        cfg = app.backend.load_config()
+        channel = getattr(cfg, 'update_channel', 'GitHub') if cfg else 'GitHub'
+        result = app.backend.check_update(channel)
+        Clock.schedule_once(lambda dt: self._check_update_done(result))
+
+    def _check_update_done(self, result):
+        self.ids.btn_check_update.disabled = False
+        if result.get('error'):
+            self.ids.update_label.text = f"检查失败: {result['error']}"
+            self.ids.update_info.text = f"渠道: {result.get('channel', '?')}"
+            return
+        cur = result.get('current_version', '?')
+        ch = result.get('channel', 'GitHub')
+        info = result.get('info', {})
+        if result.get('has_update'):
+            tag = info.get('tag', '')
+            self.ids.update_label.text = f"新版本: {tag} (当前 {cur})"
+            self.ids.update_info.text = f"渠道: {ch}"
+            self.ids.btn_download.height = dp(44)
+            self.ids.btn_download.opacity = 1
+        else:
+            tag = info.get('tag', cur)
+            self.ids.update_label.text = f"已是最新 ({tag})"
+            self.ids.update_info.text = f"渠道: {ch}"
+
+    def do_update(self):
+        self.ids.btn_download.disabled = True
+        self.ids.btn_download.text = '下载中...'
+        threading.Thread(target=self._do_update_bg, daemon=True).start()
+
+    def _do_update_bg(self):
+        ok, msg = App.get_running_app().backend.do_update()
+        Clock.schedule_once(lambda dt: self._do_update_done(ok, msg))
+
+    def _do_update_done(self, ok, msg):
+        self.ids.btn_download.disabled = False
+        self.ids.btn_download.text = '下载并安装更新'
+        self.ids.update_info.text = msg
 
 
 class AuthScreen(Screen):
@@ -779,12 +1030,24 @@ class AuthScreen(Screen):
         self._channels = {}
         self._task_id = None
         self._poll_event = None
+        self._task_running = False
+        self._status_poll = None
 
     def on_enter(self, *args):
         app = App.get_running_app()
         if not app or not app.backend:
             return
         threading.Thread(target=self._load_bg, daemon=True).start()
+        # 启动 2s 轮询运行状态
+        if self._status_poll:
+            self._status_poll.cancel()
+        self._status_poll = Clock.schedule_interval(self._poll_run_status, 2)
+        self._poll_run_status(0)
+
+    def on_leave(self, *args):
+        if self._status_poll:
+            self._status_poll.cancel()
+            self._status_poll = None
 
     def _load_bg(self):
         app = App.get_running_app()
@@ -821,11 +1084,22 @@ class AuthScreen(Screen):
     def _on_account_select(self, text):
         if text == '选择已保存账号' or not text:
             return
-        for acct in self._accounts:
+        for i, acct in enumerate(self._accounts):
             if acct.get('username') == text:
                 self.ids.username.text = acct.get('username', '')
-                self.ids.password.text = acct.get('password', '')
+                # 尝试获取完整密码
+                threading.Thread(
+                    target=self._load_account_detail_bg,
+                    args=(i,), daemon=True).start()
                 break
+
+    def _load_account_detail_bg(self, index):
+        detail = App.get_running_app().backend.get_account_detail(index)
+        if detail:
+            Clock.schedule_once(lambda dt: self._account_detail_done(detail))
+
+    def _account_detail_done(self, detail):
+        self.ids.password.text = detail.get('password', '')
 
     def _get_selected_suffix(self):
         """从 spinner 显示文本反查 suffix 值。"""
@@ -874,9 +1148,26 @@ class AuthScreen(Screen):
         app = App.get_running_app()
         if not app or not app.backend:
             return
+        # 如果任务正在运行，执行停止
+        if self._task_running:
+            threading.Thread(target=self._stop_task_bg, daemon=True).start()
+            return
         self.ids.btn_login.disabled = True
         self.ids.auth_output.text = '正在登录...\n'
         threading.Thread(target=self._do_login_bg, daemon=True).start()
+
+    def _stop_task_bg(self):
+        ok = App.get_running_app().backend.stop_login()
+        msg = "已终止认证任务" if ok else "停止失败"
+        Clock.schedule_once(lambda dt: self._stop_done(ok, msg))
+
+    def _stop_done(self, ok, msg):
+        self.ids.auth_output.text = msg + "\n"
+        self.ids.auth_status.text = msg
+        self.ids.auth_status.color = rgba('#00B894') if ok else rgba('#E17055')
+        self._task_running = False
+        self.ids.btn_login.text = '立即认证'
+        self.ids.btn_login.background_color = rgba('#00B894')
 
     def _do_login_bg(self):
         app = App.get_running_app()
@@ -902,6 +1193,9 @@ class AuthScreen(Screen):
 
     def _login_done(self, ok, output):
         self.ids.btn_login.disabled = False
+        self._task_running = False
+        self.ids.btn_login.text = '立即认证'
+        self.ids.btn_login.background_color = rgba('#00B894')
         self.ids.auth_output.text = output + f"\n\n{'认证成功' if ok else '认证失败'}"
         self.ids.auth_status.text = '认证成功' if ok else '认证失败'
         self.ids.auth_status.color = rgba('#00B894') if ok else rgba('#E17055')
@@ -976,6 +1270,63 @@ class AuthScreen(Screen):
         if ok:
             self.on_enter()
 
+    # --- 账号还原 ---
+
+    def restore_account(self):
+        """将选中的已保存账号还原到认证配置表单"""
+        text = self.ids.acct_spinner.text
+        if text == '选择已保存账号' or not text:
+            self.ids.acct_status.text = '请先选择要还原的账号'
+            self.ids.acct_status.color = rgba('#E17055')
+            return
+        for i, acct in enumerate(self._accounts):
+            if acct.get('username') == text:
+                self.ids.username.text = acct.get('username', '')
+                threading.Thread(
+                    target=self._restore_acct_bg, args=(i,),
+                    daemon=True).start()
+                return
+        self.ids.acct_status.text = '账号未找到'
+        self.ids.acct_status.color = rgba('#E17055')
+
+    def _restore_acct_bg(self, index):
+        detail = App.get_running_app().backend.get_account_detail(index)
+        if detail:
+            Clock.schedule_once(lambda dt: self._restore_acct_done(detail))
+
+    def _restore_acct_done(self, detail):
+        self.ids.password.text = detail.get('password', '')
+        self.ids.acct_status.text = f"已还原: {detail.get('username', '')}"
+        self.ids.acct_status.color = rgba('#00B894')
+
+    # --- 运行状态轮询 ---
+
+    def _poll_run_status(self, dt):
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return True
+        threading.Thread(target=self._poll_status_bg, daemon=True).start()
+
+    def _poll_status_bg(self):
+        try:
+            status = App.get_running_app().backend.get_run_status()
+            Clock.schedule_once(lambda dt: self._update_run_status(status))
+        except Exception:
+            pass
+
+    def _update_run_status(self, s):
+        running = s.get("running", False)
+        source = s.get("source")
+        self._task_running = running
+        btn = self.ids.btn_login
+        if running:
+            src_text = "(自动)" if source == "auto" else "(手动)"
+            btn.text = f"停止任务 {src_text}"
+            btn.background_color = rgba('#E17055')
+        else:
+            btn.text = "立即认证"
+            btn.background_color = rgba('#00B894')
+
 
 class AutoScreen(Screen):
 
@@ -993,6 +1344,8 @@ class AutoScreen(Screen):
         if cfg:
             self.ids.auto_run.state = 'down' if getattr(cfg, 'auto_run', False) else 'normal'
             self.ids.target_essid.text = getattr(cfg, 'target_essid', '') or ''
+            self.ids.auto_interval.text = str(getattr(cfg, 'auto_interval', 5))
+            self.ids.auto_delay.text = str(getattr(cfg, 'auto_delay', 5))
 
     def save(self):
         app = App.get_running_app()
@@ -1001,9 +1354,49 @@ class AutoScreen(Screen):
         cfg = app.backend.load_config() or DrComConfig()
         cfg.auto_run = self.ids.auto_run.state == 'down'
         cfg.target_essid = self.ids.target_essid.text.strip()
+        # 间隔/延迟
+        try:
+            interval = int(self.ids.auto_interval.text or 5)
+            if interval < 1:
+                raise ValueError
+        except ValueError:
+            self.ids.auto_status.text = '间隔需为不小于 1 的整数'
+            self.ids.auto_status.color = rgba('#E17055')
+            return
+        try:
+            delay = int(self.ids.auto_delay.text or 5)
+            if delay < 0:
+                raise ValueError
+        except ValueError:
+            self.ids.auto_status.text = '延迟需为非负整数'
+            self.ids.auto_status.color = rgba('#E17055')
+            return
+        cfg.auto_interval = interval
+        cfg.auto_delay = delay
         threading.Thread(target=self._save_bg, args=(cfg,), daemon=True).start()
         self.ids.auto_status.text = '保存中...'
         self.ids.auto_status.color = rgba('#A29BFE')
+
+    def fill_essid(self):
+        """获取当前 WiFi SSID 填充到目标 ESSID"""
+        app = App.get_running_app()
+        if not app or not app.backend:
+            return
+        threading.Thread(target=self._fill_essid_bg, daemon=True).start()
+
+    def _fill_essid_bg(self):
+        wifi = App.get_running_app().backend.get_wifi_info()
+        ssid = wifi.get('ssid', '')
+        Clock.schedule_once(lambda dt: self._fill_essid_done(ssid))
+
+    def _fill_essid_done(self, ssid):
+        if ssid:
+            self.ids.target_essid.text = ssid
+            self.ids.auto_status.text = f'已填充: {ssid}'
+            self.ids.auto_status.color = rgba('#A29BFE')
+        else:
+            self.ids.auto_status.text = '未连接 WiFi 或无法获取名称'
+            self.ids.auto_status.color = rgba('#E17055')
 
     def _save_bg(self, cfg):
         ok = App.get_running_app().backend.save_config(cfg)
@@ -1046,6 +1439,13 @@ class SettingsScreen(Screen):
             self.ids.auth_server.text = cfg.auth_server
             self.ids.redirect_server.text = cfg.redirect_server
             self.ids.debug_switch.state = 'down' if cfg.debug else 'normal'
+            # 新增字段
+            self.ids.port_input.text = str(getattr(cfg, 'port', 38080))
+            self.ids.log_file_input.text = getattr(cfg, 'log_file', '') or ''
+            self.ids.download_dir_input.text = getattr(cfg, 'download_dir', '') or ''
+            ch = getattr(cfg, 'update_channel', 'GitHub') or 'GitHub'
+            self.ids.update_channel_spinner.text = ch
+            self.ids.auto_open_webui_switch.state = 'down' if getattr(cfg, 'auto_open_webui', False) else 'normal'
         # 账号列表
         self._accounts = accounts or []
         container = self.ids.accounts_list
@@ -1131,7 +1531,7 @@ class SettingsScreen(Screen):
         threading.Thread(target=self._del_acct_bg,
                          args=(index,), daemon=True).start()
 
-    # --- 网络设置 ---
+    # --- 服务设置 ---
 
     def save_network(self):
         app = App.get_running_app()
@@ -1141,6 +1541,20 @@ class SettingsScreen(Screen):
         cfg.auth_server = self.ids.auth_server.text.strip()
         cfg.redirect_server = self.ids.redirect_server.text.strip()
         cfg.debug = self.ids.debug_switch.state == 'down'
+        # 新增字段
+        try:
+            port = int(self.ids.port_input.text or 38080)
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            self.ids.net_status.text = '端口范围 1-65535'
+            self.ids.net_status.color = rgba('#E17055')
+            return
+        cfg.port = port
+        cfg.log_file = self.ids.log_file_input.text.strip()
+        cfg.download_dir = self.ids.download_dir_input.text.strip()
+        cfg.update_channel = self.ids.update_channel_spinner.text
+        cfg.auto_open_webui = self.ids.auto_open_webui_switch.state == 'down'
         threading.Thread(target=self._save_net_bg, args=(cfg,), daemon=True).start()
         self.ids.net_status.text = '保存中...'
         self.ids.net_status.color = rgba('#A29BFE')
@@ -1151,7 +1565,7 @@ class SettingsScreen(Screen):
 
     def _save_net_done(self, ok):
         if ok:
-            self.ids.net_status.text = '网络设置已保存'
+            self.ids.net_status.text = '服务设置已保存'
             self.ids.net_status.color = rgba('#00B894')
         else:
             self.ids.net_status.text = '保存失败'

@@ -26,6 +26,12 @@ import requests
 import drcom_core
 from drcom_core import DrComConfig, LoginState
 
+try:
+    from version import __version__, __version_code__
+except ImportError:
+    __version__ = "dev"
+    __version_code__ = 0
+
 
 # ---------- 环境检测（结果缓存，避免重复 subprocess）----------
 
@@ -48,6 +54,14 @@ def has_root() -> bool:
 # 模块相关常量
 _MOD_DIR = "/data/adb/modules/drcom-wlan-login"
 _MOD_CONFIG = "/data/adb/drcom-wlan-login/config.env"
+
+# 更新渠道 URL
+_GITHUB_REPO = "greenhandzdl/camp_networks_magisk"
+_UPDATE_URLS = {
+    "GitHub": f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main/update.json",
+    "CDN":    f"https://cdn.jsdelivr.net/gh/{_GITHUB_REPO}@main/update.json",
+}
+_CDN_BASE = "https://cdn.jsdelivr.net/gh"
 
 
 def detect_module() -> Dict:
@@ -170,6 +184,26 @@ class Backend:
     def modify_channel(self, suffix: str, label: str) -> Tuple[bool, str]:
         raise NotImplementedError
 
+    def get_run_status(self) -> Dict:
+        """返回运行状态+自动认证调度状态。"""
+        raise NotImplementedError
+
+    def stop_login(self) -> bool:
+        """终止当前运行中的认证任务。"""
+        raise NotImplementedError
+
+    def check_update(self, channel: str = "GitHub") -> Dict:
+        """按渠道检查更新，返回 {info, current_version, has_update, error}。"""
+        raise NotImplementedError
+
+    def do_update(self) -> Tuple[bool, str]:
+        """下载并保存更新包。"""
+        raise NotImplementedError
+
+    def get_account_detail(self, index: int) -> Optional[Dict]:
+        """获取单个账号完整信息（含密码）。"""
+        raise NotImplementedError
+
 
 # ---------- LocalBackend（无 root / 桌面调试）----------
 
@@ -194,6 +228,8 @@ class LocalBackend(Backend):
         self._task_id = 0
         self._task_result: Optional[Dict] = None
         self._task_lock = threading.Lock()
+        self._login_running = False
+        self._stop_requested = False
 
     def get_env_info(self) -> Dict:
         root = has_root()
@@ -226,6 +262,14 @@ class LocalBackend(Backend):
         )
         config.auto_run = cfg.get("AUTO_RUN", "false").lower() in ("true", "1")
         config.target_essid = cfg.get("TARGET_ESSID", "")
+        # 扩展字段
+        config.auto_interval = int(cfg.get("AUTO_INTERVAL", "5") or 5)
+        config.auto_delay = int(cfg.get("AUTO_DELAY", "5") or 5)
+        config.port = int(cfg.get("PORT", "38080") or 38080)
+        config.log_file = cfg.get("LOG_FILE", "/data/local/tmp/drcom_webui.log")
+        config.download_dir = cfg.get("DOWNLOAD_DIR", "/sdcard/Download")
+        config.update_channel = cfg.get("UPDATE_CHANNEL", "GitHub")
+        config.auto_open_webui = cfg.get("AUTO_OPEN_WEBUI", "false").lower() in ("true", "1")
         return config
 
     def save_config(self, config: DrComConfig) -> bool:
@@ -240,6 +284,13 @@ class LocalBackend(Backend):
                 f.write(f"DEBUG={'true' if config.debug else 'false'}\n")
                 f.write(f"AUTO_RUN={'true' if getattr(config, 'auto_run', False) else 'false'}\n")
                 f.write(f"TARGET_ESSID={getattr(config, 'target_essid', '')}\n")
+                f.write(f"AUTO_INTERVAL={getattr(config, 'auto_interval', 5)}\n")
+                f.write(f"AUTO_DELAY={getattr(config, 'auto_delay', 5)}\n")
+                f.write(f"PORT={getattr(config, 'port', 38080)}\n")
+                f.write(f"LOG_FILE={getattr(config, 'log_file', '/data/local/tmp/drcom_webui.log')}\n")
+                f.write(f"DOWNLOAD_DIR={getattr(config, 'download_dir', '/sdcard/Download')}\n")
+                f.write(f"UPDATE_CHANNEL={getattr(config, 'update_channel', 'GitHub')}\n")
+                f.write(f"AUTO_OPEN_WEBUI={'true' if getattr(config, 'auto_open_webui', False) else 'false'}\n")
             try:
                 os.chmod(self._config_path, 0o600)
             except OSError:
@@ -260,6 +311,7 @@ class LocalBackend(Backend):
             self._task_result = None
         threading.Thread(target=self._do_login, args=(tid, config),
                          daemon=True).start()
+        self._login_running = True
         return tid, ""
 
     def _do_login(self, task_id, config):
@@ -270,6 +322,10 @@ class LocalBackend(Backend):
             lines.append(msg)
 
         log("检测网络状态...")
+        if self._stop_requested:
+            log("任务已取消")
+            self._finish(task_id, False, "\n".join(lines))
+            return
         if drcom_core.check_internet(config):
             log("外网已连通，无需认证。")
             self._finish(task_id, True, "\n".join(lines))
@@ -290,6 +346,10 @@ class LocalBackend(Backend):
         host, ip, ac_name, ac_ip, mac = params
         log(f"参数: host={host} ip={ip}")
         log("执行登录...")
+        if self._stop_requested:
+            log("任务已取消")
+            self._finish(task_id, False, "\n".join(lines))
+            return
 
         ok, resp = drcom_core.perform_login(config, host, ip, ac_name, ac_ip, mac)
         if not ok:
@@ -310,6 +370,8 @@ class LocalBackend(Backend):
         self._finish(task_id, ok_parse, "\n".join(lines))
 
     def _finish(self, task_id, ok, output):
+        self._login_running = False
+        self._stop_requested = False
         self._save_log(output)
         with self._task_lock:
             self._task_result = {"ok": ok, "output": output}
@@ -479,6 +541,85 @@ class LocalBackend(Backend):
         self._write_json(self._channels_path, channels)
         return True, "修改成功"
 
+    # --- 运行状态 / 停止任务 ---
+
+    def get_run_status(self) -> Dict:
+        return {
+            "running": self._login_running,
+            "source": "manual" if self._login_running else None,
+            "auto_enabled": False,
+            "auto_connected": False,
+            "waiting_first": False,
+            "next_run_in": 0,
+            "has_schedule": False,
+        }
+
+    def stop_login(self) -> bool:
+        if not self._login_running:
+            return False
+        self._stop_requested = True
+        return True
+
+    # --- 更新检测 / 下载 ---
+
+    def check_update(self, channel="GitHub"):
+        try:
+            url = _UPDATE_URLS.get(channel, _UPDATE_URLS["GitHub"])
+            resp = requests.get(url, timeout=10,
+                                headers={"User-Agent": "DrCOM-Magisk"})
+            resp.raise_for_status()
+            d = resp.json()
+            tag = d.get("version", "")
+            vc = int(d.get("versionCode", 0))
+            info = {
+                "channel": channel, "tag": tag, "versionCode": vc,
+                "html_url": d.get("changelog", ""),
+                "zip_cdn": f"{_CDN_BASE}/{_GITHUB_REPO}@releases/{tag}.zip",
+                "zip_direct": f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/drcom-wlan-login.zip",
+            }
+            return {
+                "info": info,
+                "current_version": __version__,
+                "channel": channel,
+                "has_update": vc > __version_code__,
+            }
+        except Exception as e:
+            return {"error": str(e), "current_version": __version__,
+                    "channel": channel}
+
+    def do_update(self):
+        cfg = self.load_config()
+        channel = getattr(cfg, "update_channel", "GitHub") if cfg else "GitHub"
+        result = self.check_update(channel)
+        if result.get("error"):
+            return False, f"检查更新失败: {result['error']}"
+        info = result.get("info", {})
+        dl_dir = getattr(cfg, "download_dir", "/sdcard/Download") if cfg else "/sdcard/Download"
+        os.makedirs(dl_dir, exist_ok=True)
+        dl_path = os.path.join(dl_dir, "drcom_update.zip")
+        last_err = ""
+        for url in (info.get("zip_cdn", ""), info.get("zip_direct", "")):
+            if not url:
+                continue
+            try:
+                r = requests.get(url, timeout=60, stream=True,
+                                 headers={"User-Agent": "DrCOM-Magisk"})
+                r.raise_for_status()
+                with open(dl_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                size_kb = os.path.getsize(dl_path) / 1024
+                return True, f"已下载: {info['tag']} ({size_kb:.1f} KB)\n保存到: {dl_path}"
+            except Exception as e:
+                last_err = str(e)
+        return False, f"下载失败: {last_err}"
+
+    def get_account_detail(self, index):
+        accounts = self.list_accounts()
+        if not (0 <= index < len(accounts)):
+            return None
+        return accounts[index]
+
 
 # ---------- ModuleBackend（root + 模块已装）----------
 
@@ -511,6 +652,14 @@ class ModuleBackend(Backend):
             )
             config.auto_run = d.get("auto_run", "false") == "true"
             config.target_essid = d.get("target_essid", "")
+            # 扩展字段
+            config.auto_interval = int(d.get("auto_interval", "5") or 5)
+            config.auto_delay = int(d.get("auto_delay", "5") or 5)
+            config.port = int(d.get("port", "38080") or 38080)
+            config.log_file = d.get("log_file", "/data/local/tmp/drcom_webui.log")
+            config.download_dir = d.get("download_dir", "/sdcard/Download")
+            config.update_channel = d.get("update_channel", "GitHub")
+            config.auto_open_webui = d.get("auto_open_webui", "false") == "true"
             return config
         except Exception:
             return None
@@ -525,17 +674,24 @@ class ModuleBackend(Backend):
                 "suffix": config.suffix,
             })
             ok = ok and (r.status_code == 200)
-            # 服务器/调试设置（不传 port，保持当前端口不变）
+            # 服务器/调试设置
             r2 = requests.post(f"{self._base}/api/save_service", timeout=3, data={
+                "port": str(getattr(config, 'port', 38080)),
+                "log_file": getattr(config, 'log_file', ''),
+                "download_dir": getattr(config, 'download_dir', ''),
+                "update_channel": getattr(config, 'update_channel', 'GitHub'),
                 "auth_server": config.auth_server,
                 "redirect_server": config.redirect_server,
                 "debug": str(config.debug).lower(),
+                "auto_open_webui": str(getattr(config, 'auto_open_webui', False)).lower(),
             })
             ok = ok and (r2.status_code == 200)
             # 自动认证设置
             r3 = requests.post(f"{self._base}/api/save_auto", timeout=3, data={
                 "auto_run": str(getattr(config, 'auto_run', False)).lower(),
                 "target_essid": getattr(config, 'target_essid', ''),
+                "auto_interval": str(getattr(config, 'auto_interval', 5)),
+                "auto_delay": str(getattr(config, 'auto_delay', 5)),
             })
             ok = ok and (r3.status_code == 200)
             return ok
@@ -682,6 +838,51 @@ class ModuleBackend(Backend):
             return d.get("ok", False), d.get("error", "")
         except Exception as e:
             return False, str(e)
+
+    # --- 运行状态 / 停止任务 ---
+
+    def get_run_status(self) -> Dict:
+        try:
+            return requests.get(f"{self._base}/api/run_status", timeout=3).json()
+        except Exception:
+            return {"running": False, "source": None, "auto_enabled": False,
+                    "auto_connected": False, "waiting_first": False,
+                    "next_run_in": 0, "has_schedule": False}
+
+    def stop_login(self) -> bool:
+        try:
+            r = requests.post(f"{self._base}/api/stop_run", timeout=3)
+            return r.json().get("ok", False)
+        except Exception:
+            return False
+
+    # --- 更新检测 / 下载 ---
+
+    def check_update(self, channel="GitHub"):
+        try:
+            return requests.get(f"{self._base}/api/check_update", timeout=10).json()
+        except Exception as e:
+            return {"error": str(e), "current_version": __version__,
+                    "channel": channel}
+
+    def do_update(self):
+        try:
+            r = requests.post(f"{self._base}/api/do_update", timeout=120)
+            d = r.json()
+            return d.get("ok", False), d.get("output", "") or d.get("error", "")
+        except Exception as e:
+            return False, str(e)
+
+    def get_account_detail(self, index):
+        try:
+            r = requests.get(f"{self._base}/api/account_detail?index={index}", timeout=3)
+            d = r.json()
+            if d.get("ok"):
+                return {"username": d.get("username", ""),
+                        "password": d.get("password", "")}
+            return None
+        except Exception:
+            return None
 
 
 # ---------- 工厂函数 ----------
