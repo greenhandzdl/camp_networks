@@ -100,7 +100,7 @@ p4a.source_dir = ./p4a-source
 #
 # CI 构建使用 release 模式 + 固定 keystore 保证签名一致
 # 本地开发可用 debug 模式: buildozer android debug
-android.release_artifact =
+android.release_artifact = apk
 
 [buildozer]
 
