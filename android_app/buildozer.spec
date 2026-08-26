@@ -95,6 +95,13 @@ android.enable_androidx = True
 # CI 预克隆 v2024.01.21 稳定版到工作区根目录 p4a-source/，buildozer 跳过所有 git 操作
 p4a.source_dir = ./p4a-source
 
+#
+# APK Signing (CI 通过环境变量注入)
+#
+# CI 构建使用 release 模式 + 固定 keystore 保证签名一致
+# 本地开发可用 debug 模式: buildozer android debug
+android.release_artifact =
+
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))

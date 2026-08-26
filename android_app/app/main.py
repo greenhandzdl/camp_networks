@@ -21,8 +21,8 @@ from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
-from kivy.uix.spinner import Spinner
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
@@ -149,16 +149,18 @@ KV = """
     text: '关'
     on_state: self.text = '开' if self.state == 'down' else '关'; self.background_color = rgba('#6C5CE7') if self.state == 'down' else rgba('#2A2A3A')
 
-<DSpinner@Spinner>:
+<ModalSpinner>:
     background_normal: ''
     background_down: ''
     background_color: rgba('#0F0F13')
     color: rgba('#E0E0E0')
     font_name: 'Roboto'
     font_size: '14sp'
-    option_cls: 'MyLabel'
     size_hint_y: None
     height: dp(48)
+    halign: 'center'
+    valign: 'middle'
+    on_release: self._open_modal()
     canvas.after:
         Color:
             rgba: rgba('#2A2A3A')
@@ -375,10 +377,9 @@ KV = """
                     height: dp(20)
                     color: rgba('#8888A0')
                     font_size: '12sp'
-                DSpinner:
+                ModalSpinner:
                     id: suffix_spinner
                     text: '选择运营商'
-                    values: []
                     on_text: root._on_suffix_select(self.text)
                 MyButton:
                     text: '保存配置'
@@ -422,10 +423,9 @@ KV = """
             Card:
                 TitleLabel:
                     text: '账号快捷管理'
-                DSpinner:
+                ModalSpinner:
                     id: acct_spinner
                     text: '选择已保存账号'
-                    values: []
                     on_text: root._on_account_select(self.text)
                 BoxLayout:
                     orientation: 'horizontal'
@@ -612,10 +612,9 @@ KV = """
                     height: dp(20)
                     color: rgba('#8888A0')
                     font_size: '12sp'
-                DSpinner:
+                ModalSpinner:
                     id: update_channel_spinner
                     text: 'GitHub'
-                    values: ['GitHub', 'CDN']
                 BoxLayout:
                     orientation: 'horizontal'
                     size_hint_y: None
@@ -745,6 +744,63 @@ KV = """
 """
 
 Builder.load_string(KV)
+
+
+class ModalSpinner(Button):
+    """Spinner 替代：使用 ModalView (Popup) 显示选项，解决 ScrollView 内触摸失效问题"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._options = {}
+        self._popup = None
+
+    def set_options(self, display_list, value_map=None):
+        """设置选项列表。
+
+        Args:
+            display_list: 显示文本列表
+            value_map: {display: value} 映射；若为 None 则 value = display
+        """
+        self._options = {}
+        for d in display_list:
+            self._options[d] = value_map[d] if value_map and d in value_map else d
+
+    def _open_modal(self):
+        if not self._options:
+            return
+        content = BoxLayout(orientation='vertical', spacing=dp(2),
+                            padding=[0, dp(8), 0, dp(8)])
+        sv = ScrollView(size_hint=(1, 1))
+        inner = BoxLayout(orientation='vertical', size_hint_y=None,
+                          spacing=dp(2))
+        inner.bind(minimum_height=inner.setter('height'))
+        for display in self._options:
+            btn = Button(
+                text=display, size_hint_y=None, height=dp(48),
+                background_normal='', background_down='',
+                background_color=rgba('#1A1A24'),
+                color=rgba('#E0E0E0'), font_name='Roboto',
+                font_size='14sp')
+            btn.bind(on_press=lambda inst, d=display: self._select(d))
+            inner.add_widget(btn)
+        sv.add_widget(inner)
+        content.add_widget(sv)
+        popup = Popup(
+            title='', content=content,
+            size_hint=(0.85, 0.6),
+            background_color=rgba('#0F0F13'),
+            separator_color=rgba('#6C5CE7'),
+            auto_dismiss=True)
+        popup.title = self.text if self.text else '选择'
+        self._popup = popup
+        popup.open()
+
+    def _select(self, display):
+        value = self._options.get(display, display)
+        self.text = str(value)
+        if hasattr(self, '_popup') and self._popup:
+            self._popup.dismiss()
+            self._popup = None
 
 
 # ---------- Screen 类 ----------
@@ -1063,11 +1119,11 @@ class AuthScreen(Screen):
         for suffix, label in self._channels.items():
             display = f"{label} ({suffix})" if suffix else f"{label} (校园网)"
             ch_list.append(display)
-        self.ids.suffix_spinner.values = ch_list
+        self.ids.suffix_spinner.set_options(ch_list)
         # 账号下拉
         self._accounts = accounts or []
         acct_list = ['选择已保存账号'] + [a.get('username', '') for a in self._accounts]
-        self.ids.acct_spinner.values = acct_list
+        self.ids.acct_spinner.set_options(acct_list)
         if cfg:
             self.ids.username.text = cfg.username
             self.ids.password.text = cfg.password
