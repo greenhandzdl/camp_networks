@@ -160,7 +160,8 @@ KV = """
     height: dp(48)
     halign: 'center'
     valign: 'middle'
-    on_release: self._open_modal()
+    on_press: self.background_color = rgba('#1A1A2A')
+    on_release: self.background_color = rgba('#0F0F13'); self._open_modal()
     canvas.after:
         Color:
             rgba: rgba('#2A2A3A')
@@ -220,7 +221,7 @@ KV = """
                         text: '刷新网络'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.refresh_env()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.refresh_env()
                         on_release: self.background_color = rgba('#2A2A3A')
                     MyButton:
                         id: btn_webui
@@ -229,7 +230,7 @@ KV = """
                         size_hint_x: 0
                         opacity: 0
                         background_color: rgba('#00B894')
-                        on_press: root.open_webui()
+                        on_press: self.background_color = rgba('#009B7D'); root.open_webui()
                         on_release: self.background_color = rgba('#00B894')
 
             Card:
@@ -263,13 +264,13 @@ KV = """
                         id: btn_login
                         text: '立即认证'
                         background_color: rgba('#00B894')
-                        on_press: root.do_login()
-                        on_release: self.background_color = rgba('#00B894') if not root._task_running else rgba('#E17055')
+                        on_press: self.background_color = rgba('#009B7D'); root.do_login()
+                        on_release: self.background_color = rgba('#E17055') if root._task_running else rgba('#00B894')
                     MyButton:
                         id: btn_logout
                         text: '登出'
                         background_color: rgba('#E17055')
-                        on_press: root.do_logout()
+                        on_press: self.background_color = rgba('#C45D47'); root.do_logout()
                         on_release: self.background_color = rgba('#E17055')
                 ScrollView:
                     size_hint_y: None
@@ -296,13 +297,13 @@ KV = """
                         text: '查看'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.view_log()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.view_log()
                         on_release: self.background_color = rgba('#2A2A3A')
                     MyButton:
                         text: '清理'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.clear_log()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.clear_log()
                         on_release: self.background_color = rgba('#2A2A3A')
 
             Card:
@@ -320,7 +321,7 @@ KV = """
                     size_hint_y: None
                     height: dp(44)
                     background_color: rgba('#2A2A3A')
-                    on_press: root.check_update()
+                    on_press: self.background_color = rgba('#1A1A2A'); root.check_update()
                     on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     id: update_info
@@ -336,7 +337,7 @@ KV = """
                     height: 0
                     opacity: 0
                     background_color: rgba('#E17055')
-                    on_press: root.do_update()
+                    on_press: self.background_color = rgba('#C45D47'); root.do_update()
                     on_release: self.background_color = rgba('#E17055')
 
 
@@ -385,7 +386,8 @@ KV = """
                     text: '保存配置'
                     size_hint_y: None
                     height: dp(48)
-                    on_press: root.save_config()
+                    on_press: self.background_color = rgba('#5A4BD1'); root.save_config()
+                    on_release: self.background_color = rgba('#6C5CE7')
 
             Card:
                 TitleLabel:
@@ -405,13 +407,13 @@ KV = """
                         id: btn_login
                         text: '立即认证'
                         background_color: rgba('#00B894')
-                        on_press: root.do_login()
-                        on_release: self.background_color = rgba('#00B894') if not root._task_running else rgba('#E17055')
+                        on_press: self.background_color = rgba('#009B7D'); root.do_login()
+                        on_release: self.background_color = rgba('#E17055') if root._task_running else rgba('#00B894')
                     MyButton:
                         id: btn_logout
                         text: '登出'
                         background_color: rgba('#E17055')
-                        on_press: root.do_logout()
+                        on_press: self.background_color = rgba('#C45D47'); root.do_logout()
                         on_release: self.background_color = rgba('#E17055')
                 ScrollView:
                     size_hint_y: None
@@ -436,20 +438,20 @@ KV = """
                         text: '保存当前'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.save_account()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.save_account()
                         on_release: self.background_color = rgba('#2A2A3A')
                     MyButton:
                         id: btn_del_acct
                         text: '删除选中'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.delete_account()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.delete_account()
                         on_release: self.background_color = rgba('#2A2A3A')
                     MyButton:
                         text: '还原'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.restore_account()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.restore_account()
                         on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     id: acct_status
@@ -502,7 +504,7 @@ KV = """
                         width: dp(80)
                         font_size: '12sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.fill_essid()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.fill_essid()
                         on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     text: '运行间隔（分钟）'
@@ -528,7 +530,8 @@ KV = """
                     text: '保存自动设置'
                     size_hint_y: None
                     height: dp(48)
-                    on_press: root.save()
+                    on_press: self.background_color = rgba('#5A4BD1'); root.save()
+                    on_release: self.background_color = rgba('#6C5CE7')
                 MyLabel:
                     id: auto_status
                     text: ''
@@ -637,7 +640,8 @@ KV = """
                     text: '保存服务设置'
                     size_hint_y: None
                     height: dp(48)
-                    on_press: root.save_network()
+                    on_press: self.background_color = rgba('#5A4BD1'); root.save_network()
+                    on_release: self.background_color = rgba('#6C5CE7')
                 MyLabel:
                     id: net_status
                     text: ''
@@ -677,14 +681,14 @@ KV = """
                         text: '保存'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.save_account()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.save_account()
                         on_release: self.background_color = rgba('#2A2A3A')
                     MyButton:
                         id: btn_del_acct
                         text: '删除'
                         font_size: '13sp'
                         background_color: rgba('#2A2A3A')
-                        on_press: root.delete_account()
+                        on_press: self.background_color = rgba('#1A1A2A'); root.delete_account()
                         on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     id: acct_status
@@ -722,7 +726,7 @@ KV = """
                     size_hint_y: None
                     height: dp(40)
                     background_color: rgba('#2A2A3A')
-                    on_press: root.save_channel()
+                    on_press: self.background_color = rgba('#1A1A2A'); root.save_channel()
                     on_release: self.background_color = rgba('#2A2A3A')
                 MyButton:
                     id: ch_cancel_btn
@@ -732,7 +736,7 @@ KV = """
                     opacity: 0
                     disabled: True
                     background_color: rgba('#2A2A3A')
-                    on_press: root._cancel_ch_edit()
+                    on_press: self.background_color = rgba('#1A1A2A'); root._cancel_ch_edit()
                     on_release: self.background_color = rgba('#2A2A3A')
                 MyLabel:
                     id: ch_status
@@ -781,6 +785,8 @@ class ModalSpinner(Button):
                 background_color=rgba('#1A1A24'),
                 color=rgba('#E0E0E0'), font_name='Roboto',
                 font_size='14sp')
+            btn.bind(on_press=lambda inst: setattr(inst, 'background_color', rgba('#0F0F13')),
+                     on_release=lambda inst: setattr(inst, 'background_color', rgba('#1A1A24')))
             btn.bind(on_press=lambda inst, d=display: self._select(d))
             inner.add_widget(btn)
         sv.add_widget(inner)
@@ -1515,21 +1521,29 @@ class SettingsScreen(Screen):
             for i, acct in enumerate(self._accounts):
                 row = BoxLayout(orientation='horizontal', size_hint_y=None,
                                 height=dp(44), spacing=dp(4))
+                _btn_base = (0.06, 0.06, 0.08, 1)
+                _btn_dark = (0.04, 0.04, 0.06, 1)
                 btn = Button(
                     text=f"  {acct.get('username', '')}",
                     size_hint_x=1, background_normal='', background_down='',
-                    background_color=(0.06, 0.06, 0.08, 1),
+                    background_color=_btn_base,
                     color=(0.88, 0.88, 0.93, 1),
                     font_name='Roboto', font_size='14sp',
                     halign='left', valign='middle')
+                btn.bind(on_press=lambda inst, c=_btn_dark: setattr(inst, 'background_color', c),
+                         on_release=lambda inst, c=_btn_base: setattr(inst, 'background_color', c))
                 btn.bind(on_press=lambda inst, idx=i: self._select_acct(idx))
                 row.add_widget(btn)
+                _del_base = (0.165, 0.165, 0.227, 1)
+                _del_dark = (0.12, 0.12, 0.17, 1)
                 del_btn = Button(
                     text='删除', size_hint_x=None, width=dp(56),
                     background_normal='', background_down='',
-                    background_color=(0.165, 0.165, 0.227, 1),
+                    background_color=_del_base,
                     color=(0.88, 0.44, 0.33, 1),
                     font_name='Roboto', font_size='12sp')
+                del_btn.bind(on_press=lambda inst, c=_del_dark: setattr(inst, 'background_color', c),
+                             on_release=lambda inst, c=_del_base: setattr(inst, 'background_color', c))
                 del_btn.bind(on_press=lambda inst, idx=i: self._quick_del_acct(idx))
                 row.add_widget(del_btn)
                 container.add_widget(row)
@@ -1556,20 +1570,26 @@ class SettingsScreen(Screen):
                 row.add_widget(tag)
             else:
                 # 自定义渠道：点击选中编辑
+                _btn_base = (0.165, 0.165, 0.227, 1)
+                _btn_dark = (0.12, 0.12, 0.17, 1)
                 edit_btn = Button(
                     text='编辑', size_hint_x=None, width=dp(48),
                     background_normal='', background_down='',
-                    background_color=(0.165, 0.165, 0.227, 1),
+                    background_color=_btn_base,
                     color=(0.42, 0.36, 0.91, 1),
                     font_name='Roboto', font_size='12sp')
+                edit_btn.bind(on_press=lambda inst, c=_btn_dark: setattr(inst, 'background_color', c),
+                              on_release=lambda inst, c=_btn_base: setattr(inst, 'background_color', c))
                 edit_btn.bind(on_press=lambda inst, s=suffix, l=label: self._select_channel(s, l))
                 row.add_widget(edit_btn)
                 del_btn = Button(
                     text='删除', size_hint_x=None, width=dp(56),
                     background_normal='', background_down='',
-                    background_color=(0.165, 0.165, 0.227, 1),
+                    background_color=_btn_base,
                     color=(0.88, 0.44, 0.33, 1),
                     font_name='Roboto', font_size='12sp')
+                del_btn.bind(on_press=lambda inst, c=_btn_dark: setattr(inst, 'background_color', c),
+                             on_release=lambda inst, c=_btn_base: setattr(inst, 'background_color', c))
                 del_btn.bind(on_press=lambda inst, s=suffix: self._quick_del_channel(s))
                 row.add_widget(del_btn)
             ch_container.add_widget(row)
