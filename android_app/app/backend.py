@@ -395,9 +395,16 @@ class LocalBackend(Backend):
     def get_wifi_info(self) -> Dict:
         try:
             import native_net
-            return native_net.get_wifi_info()
+            raw = native_net.get_wifi_info()
+            # 规范化输出，对齐 ModuleBackend（/api/network）的格式
+            return {
+                "ssid": raw.get("ssid", ""),
+                "bssid": raw.get("bssid", ""),
+                "ipv4": raw.get("ipv4") or ([raw["ip"]] if raw.get("ip") else []),
+                "ipv6": raw.get("ipv6_list") or ([raw["ipv6"]] if raw.get("ipv6") else []),
+            }
         except Exception:
-            return {"ssid": "", "ip": "", "mac": "", "ipv6": ""}
+            return {"ssid": "", "bssid": "", "ipv4": [], "ipv6": []}
 
     def get_log(self) -> str:
         try:
@@ -748,7 +755,7 @@ class ModuleBackend(Backend):
         try:
             return requests.get(f"{self._base}/api/network", timeout=3).json()
         except Exception:
-            return {"ssid": "", "ip": "", "mac": "", "ipv6": ""}
+            return {"ssid": "", "bssid": "", "ipv4": [], "ipv6": []}
 
     def get_log(self) -> str:
         try:

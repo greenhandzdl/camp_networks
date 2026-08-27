@@ -848,8 +848,12 @@ class StatusScreen(Screen):
         mode = "模块模式" if info["mode"] == "module" else "本地模式"
         ssid = wifi.get("ssid") or "--"
         bssid = wifi.get("bssid", "")
-        ipv4_list = wifi.get("ipv4") or [wifi.get("ip", "--")]
+        # ipv4/ipv6 统一为列表格式（LocalBackend 和 ModuleBackend 均已规范化）
+        ipv4_list = wifi.get("ipv4") or []
         ipv6_list = wifi.get("ipv6") or []
+        # 兑底：如果 ipv4 列表为空，尝试旧的 ip 字符串字段
+        if not ipv4_list and wifi.get("ip"):
+            ipv4_list = [wifi["ip"]]
         ipv4_str = ", ".join(ipv4_list) if ipv4_list else "--"
         ipv6_str = ", ".join(ipv6_list) if ipv6_list else "--"
         mod = info.get("module", {})
